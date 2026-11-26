@@ -1,5 +1,7 @@
 # HQPlayer Home Assistant Integration (HACS)
 
+> **Note / 注意:** This integration is currently **under active development (WIP / 開発中)**. Breaking changes or protocol adjustments may occur.
+
 Home Assistant custom integration for controlling **HQPlayer** via the **HQPlayer Control API (TCP 4321 / XML-over-TCP)**.
 
 ## Features

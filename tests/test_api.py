@@ -34,16 +34,15 @@ HQPlayerConnectionError = api_mod.HQPlayerConnectionError
 
 
 class MockHQPlayerServer:
-    """Minimal mock HQPlayer TCP 4321 XML server."""
+    """Mock HQPlayer TCP 4321 XML server matching hqplayer_tcp_4321_protocol_spec.md."""
 
     def __init__(self) -> None:
-        self.mode = "PCM"
+        self.mode = "0"  # 0=PCM, 1=SDM (DSD)
         self.volume = -12.0
-        self.filter_1x = "poly-sinc-gauss-long"
-        self.filter_nx = "poly-sinc-gauss-hires-lp"
-        self.shaper = "LNS15"
+        self.filter = "48"
+        self.shaper = "20"
         self.rate = "768000"
-        self.matrix = "Default"
+        self.matrix = "LANDER"
         self.server: asyncio.Server | None = None
         self.port: int = 0
 
@@ -79,48 +78,91 @@ class MockHQPlayerServer:
 
     def _dispatch(self, root: ET.Element) -> str:
         tag = root.tag
+        active_mode_str = "SDM (DSD)" if self.mode == "1" else "PCM"
         if tag == "Status":
             return (
-                f'<Status state="playing" volume="{self.volume:.1f}" '
-                f'filter1x="{self.filter_1x}" filternx="{self.filter_nx}" '
-                f'shaper="{self.shaper}" mode="{self.mode}" rate="{self.rate}" '
-                f'matrix="{self.matrix}" input_rate="44100" output_rate="{self.rate}" '
-                f'input_format="PCM" output_format="{self.mode}"/>'
+                f'<Status active_mode="{active_mode_str}" active_rate="{self.rate}" '
+                f'active_filter="poly-sinc-gauss-long" active_shaper="LNS15" '
+                f'state="2" volume="{self.volume:.1f}">'
+                '<metadata samplerate="44100" bits="16" channels="2"/>'
+                "</Status>"
+            )
+        if tag == "State":
+            return (
+                f'<State active_mode="{self.mode}" active_rate="{self.rate}" '
+                f'filter="{self.filter}" filter1x="{self.filter}" filterNx="{self.filter}" '
+                f'matrix_profile="{self.matrix}" mode="{self.mode}" rate="{self.rate}" '
+                f'shaper="{self.shaper}" state="2" volume="{self.volume:.1f}"/>'
             )
         if tag == "GetFilters":
             return (
                 "<GetFilters>"
-                '<Filter1x name="poly-sinc-gauss-long"/>'
-                '<Filter1x name="sinc-M"/>'
-                '<FilterNx name="poly-sinc-gauss-hires-lp"/>'
-                '<FilterNx name="sinc-L"/>'
+                '<FiltersItem index="0" name="IIR" value="64"/>'
+                '<FiltersItem index="1" name="poly-sinc-gauss-long" value="48"/>'
                 "</GetFilters>"
             )
         if tag == "GetShapers":
-            if self.mode == "SDM":
-                return '<GetShapers><Shaper name="ASDM7EC-super"/><Shaper name="ASDM5EC"/></GetShapers>'
-            return '<GetShapers><Shaper name="LNS15"/><Shaper name="NS9"/></GetShapers>'
-        if tag == "GetOutputModes":
-            return '<GetOutputModes><OutputMode name="PCM"/><OutputMode name="SDM"/></GetOutputModes>'
+            if self.mode == "1":
+                return (
+                    "<GetShapers>"
+                    '<ShapersItem index="25" name="ASDM7EC-super" value="20"/>'
+                    '<ShapersItem index="24" name="ASDM5EC" value="19"/>'
+                    "</GetShapers>"
+                )
+            return (
+                "<GetShapers>"
+                '<ShapersItem index="10" name="LNS15" value="20"/>'
+                '<ShapersItem index="11" name="NS9" value="21"/>'
+                "</GetShapers>"
+            )
+        if tag == "GetModes":
+            return (
+                "<GetModes>"
+                '<ModesItem index="0" name="[source]" value="-1"/>'
+                '<ModesItem index="1" name="PCM" value="0"/>'
+                '<ModesItem index="2" name="SDM (DSD)" value="1"/>'
+                "</GetModes>"
+            )
         if tag == "GetRates":
-            if self.mode == "SDM":
-                return '<GetRates><Rate name="11289600"/><Rate name="22579200"/></GetRates>'
-            return '<GetRates><Rate name="384000"/><Rate name="768000"/></GetRates>'
-        if tag == "GetMatrixProfiles":
-            return '<GetMatrixProfiles><Profile name="Default"/><Profile name="RoomEQ"/></GetMatrixProfiles>'
-        if tag == "SetOutputMode":
-            self.mode = root.attrib["name"]
-            if self.mode == "SDM":
-                self.shaper = "ASDM7EC-super"
+            if self.mode == "1":
+                return (
+                    "<GetRates>"
+                    '<RatesItem name="Auto" value="0"/>'
+                    '<RatesItem name="11289600" value="11289600"/>'
+                    '<RatesItem name="22579200" value="22579200"/>'
+                    "</GetRates>"
+                )
+            return (
+                "<GetRates>"
+                '<RatesItem name="Auto" value="0"/>'
+                '<RatesItem name="384000" value="384000"/>'
+                '<RatesItem name="768000" value="768000"/>'
+                "</GetRates>"
+            )
+        if tag == "MatrixListProfiles":
+            return (
+                "<MatrixListProfiles>"
+                '<MatrixProfile name="DX1"/>'
+                '<MatrixProfile name="LANDER"/>'
+                "</MatrixListProfiles>"
+            )
+        if tag == "MatrixGetProfile":
+            return f'<MatrixGetProfile result="OK" value="{self.matrix}"/>'
+        if tag == "VolumeRange":
+            return '<VolumeRange adaptive="0" enabled="1" max="0.0" min="-60.0"/>'
+        if tag == "SetMode":
+            self.mode = root.attrib["value"]
+            if self.mode == "1":
+                self.shaper = "20"
                 self.rate = "11289600"
-            return "<SetOutputMode ok=\"1\"/>"
+            return '<SetMode result="OK"/>'
         if tag == "Volume":
             self.volume = float(root.attrib["value"])
-            return "<Volume ok=\"1\"/>"
-        if tag == "SetFilter1x":
-            self.filter_1x = root.attrib["name"]
-            return "<SetFilter1x ok=\"1\"/>"
-        return f"<{tag} ok=\"1\"/>"
+            return '<Volume result="OK"/>'
+        if tag == "MatrixSetProfile":
+            self.matrix = root.attrib["value"]
+            return '<MatrixSetProfile result="OK"/>'
+        return f'<{tag} result="OK"/>'
 
 
 class TestHQPlayerClient(unittest.IsolatedAsyncioTestCase):
@@ -140,18 +182,23 @@ class TestHQPlayerClient(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state.state, "playing")
         self.assertEqual(state.volume, -12.0)
         self.assertEqual(state.output_mode, "PCM")
+        self.assertEqual(state.filter_1x, "poly-sinc-gauss-long")
         self.assertEqual(state.shapers, ["LNS15", "NS9"])
-        self.assertEqual(state.sample_rates, ["384000", "768000"])
-        self.assertEqual(state.matrix_profiles, ["Default", "RoomEQ"])
+        self.assertEqual(state.sample_rates, ["Auto", "384000", "768000"])
+        self.assertEqual(state.matrix_profiles, ["DX1", "LANDER"])
+        self.assertEqual(state.matrix_profile, "LANDER")
 
-        # Switch output mode to SDM and verify dynamic options update
-        await self.client.set_output_mode("SDM")
+        # Switch output mode to SDM (DSD), change matrix profile and volume
+        await self.client.set_output_mode("SDM (DSD)")
+        await self.client.set_matrix_profile("DX1")
         await self.client.set_volume(-6.5)
+
         state2 = await self.client.fetch_full_state()
-        self.assertEqual(state2.output_mode, "SDM")
+        self.assertEqual(state2.output_mode, "SDM (DSD)")
+        self.assertEqual(state2.matrix_profile, "DX1")
         self.assertEqual(state2.volume, -6.5)
         self.assertEqual(state2.shapers, ["ASDM7EC-super", "ASDM5EC"])
-        self.assertEqual(state2.sample_rates, ["11289600", "22579200"])
+        self.assertEqual(state2.sample_rates, ["Auto", "11289600", "22579200"])
 
     async def test_connection_error_on_unreachable_port(self) -> None:
         bad_client = HQPlayerClient("127.0.0.1", 1, timeout=0.5)

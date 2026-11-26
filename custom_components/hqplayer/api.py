@@ -11,6 +11,11 @@ from .const import DEFAULT_PORT, DEFAULT_TIMEOUT
 
 _LOGGER = logging.getLogger(__name__)
 
+_STATE_MAP = {
+    "1": "stopped",
+    "2": "playing",
+}
+
 
 class HQPlayerError(Exception):
     """Base exception for HQPlayer API errors."""
@@ -26,6 +31,9 @@ class HQPlayerState:
 
     state: str = "unknown"
     volume: float | None = None
+    volume_min: float | None = None
+    volume_max: float | None = None
+    volume_enabled: bool = True
     filter_1x: str | None = None
     filter_nx: str | None = None
     shaper: str | None = None
@@ -61,6 +69,16 @@ class HQPlayerClient:
         self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
         self._lock = asyncio.Lock()
+
+        # Name <-> value mappings populated from Get* commands
+        self._filter_name_to_val: dict[str, str] = {}
+        self._filter_val_to_name: dict[str, str] = {}
+        self._shaper_name_to_val: dict[str, str] = {}
+        self._shaper_val_to_name: dict[str, str] = {}
+        self._mode_name_to_val: dict[str, str] = {}
+        self._mode_val_to_name: dict[str, str] = {}
+        self._rate_name_to_val: dict[str, str] = {}
+        self._rate_val_to_name: dict[str, str] = {}
 
     @property
     def connected(self) -> bool:
@@ -143,16 +161,21 @@ class HQPlayerClient:
                         return root
 
     @staticmethod
-    def _parse_list(
-        element: ET.Element, item_tag: str, attr: str = "name"
-    ) -> list[str]:
-        """Extract ordered option names from child XML elements."""
-        items: list[str] = []
+    def _parse_item_map(
+        element: ET.Element, item_tag: str
+    ) -> tuple[list[str], dict[str, str], dict[str, str]]:
+        """Extract ordered names and name<->value mappings from XML items."""
+        names: list[str] = []
+        name_to_val: dict[str, str] = {}
+        val_to_name: dict[str, str] = {}
         for child in element.findall(item_tag):
-            val = child.attrib.get(attr) or (child.text or "").strip()
-            if val:
-                items.append(val)
-        return items
+            name = child.attrib.get("name")
+            val = child.attrib.get("value") or child.attrib.get("index") or name
+            if name and val is not None:
+                names.append(name)
+                name_to_val[name] = val
+                val_to_name[val] = name
+        return names, name_to_val, val_to_name
 
     @staticmethod
     def _parse_float(value: str | None) -> float | None:
@@ -168,58 +191,135 @@ class HQPlayerClient:
         """Fetch raw Status XML element."""
         return await self._send_command("<Status/>")
 
+    async def get_state(self) -> ET.Element:
+        """Fetch raw State XML element."""
+        return await self._send_command("<State/>")
+
     async def get_filters(self) -> tuple[list[str], list[str]]:
-        """Fetch available 1x and Nx filters."""
+        """Fetch available filters (<FiltersItem>)."""
         resp = await self._send_command("<GetFilters/>")
-        filters_1x = self._parse_list(resp, "Filter1x") or self._parse_list(
-            resp, "Filter"
-        )
-        filters_nx = self._parse_list(resp, "FilterNx") or list(filters_1x)
-        return filters_1x, filters_nx
+        names, n2v, v2n = self._parse_item_map(resp, "FiltersItem")
+        self._filter_name_to_val = n2v
+        self._filter_val_to_name = v2n
+        return names, list(names)
 
     async def get_shapers(self) -> list[str]:
-        """Fetch available shapers / modulators."""
+        """Fetch available shapers / modulators (<ShapersItem>)."""
         resp = await self._send_command("<GetShapers/>")
-        return self._parse_list(resp, "Shaper")
+        names, n2v, v2n = self._parse_item_map(resp, "ShapersItem")
+        self._shaper_name_to_val = n2v
+        self._shaper_val_to_name = v2n
+        return names
 
     async def get_output_modes(self) -> list[str]:
-        """Fetch available output modes (e.g. PCM, SDM)."""
-        resp = await self._send_command("<GetOutputModes/>")
-        return self._parse_list(resp, "OutputMode")
+        """Fetch available output modes (<ModesItem>)."""
+        resp = await self._send_command("<GetModes/>")
+        names, n2v, v2n = self._parse_item_map(resp, "ModesItem")
+        self._mode_name_to_val = n2v
+        self._mode_val_to_name = v2n
+        return names
 
     async def get_sample_rates(self) -> list[str]:
-        """Fetch available sample rates for the current output mode."""
+        """Fetch available sample rates (<RatesItem>)."""
         resp = await self._send_command("<GetRates/>")
-        return self._parse_list(resp, "Rate")
+        names, n2v, v2n = self._parse_item_map(resp, "RatesItem")
+        self._rate_name_to_val = n2v
+        self._rate_val_to_name = v2n
+        return names
 
     async def get_matrix_profiles(self) -> list[str]:
-        """Fetch available matrix profiles."""
-        resp = await self._send_command("<GetMatrixProfiles/>")
-        return self._parse_list(resp, "Profile")
+        """Fetch available matrix profiles (<MatrixListProfiles/>)."""
+        resp = await self._send_command("<MatrixListProfiles/>")
+        return [
+            child.attrib["name"]
+            for child in resp.findall("MatrixProfile")
+            if child.attrib.get("name")
+        ]
+
+    async def get_matrix_profile(self) -> str | None:
+        """Fetch currently active matrix profile (<MatrixGetProfile/>)."""
+        resp = await self._send_command("<MatrixGetProfile/>")
+        return resp.attrib.get("value")
+
+    async def get_volume_range(self) -> tuple[float | None, float | None, bool]:
+        """Fetch volume range and enabled flag (<VolumeRange/>)."""
+        resp = await self._send_command("<VolumeRange/>")
+        return (
+            self._parse_float(resp.attrib.get("min")),
+            self._parse_float(resp.attrib.get("max")),
+            resp.attrib.get("enabled", "1") == "1",
+        )
 
     async def fetch_full_state(self) -> HQPlayerState:
-        """Fetch current status and all dynamic option lists."""
+        """Fetch current status, engine state, and all dynamic option lists."""
         status_el = await self.get_status()
+        state_el = await self.get_state()
         filters_1x, filters_nx = await self.get_filters()
         shapers = await self.get_shapers()
         output_modes = await self.get_output_modes()
         sample_rates = await self.get_sample_rates()
         matrix_profiles = await self.get_matrix_profiles()
+        matrix_current = await self.get_matrix_profile()
+        vol_min, vol_max, vol_enabled = await self.get_volume_range()
 
-        attrs = status_el.attrib
+        s_attrs = status_el.attrib
+        st_attrs = state_el.attrib
+        meta = status_el.find("metadata")
+        meta_attrs = meta.attrib if meta is not None else {}
+
+        raw_state = st_attrs.get("state") or s_attrs.get("state", "unknown")
+        state_str = _STATE_MAP.get(raw_state, raw_state)
+
+        filter_1x_val = st_attrs.get("filter1x") or st_attrs.get("filter")
+        filter_nx_val = st_attrs.get("filterNx") or st_attrs.get("filter")
+        shaper_val = st_attrs.get("shaper")
+        mode_val = st_attrs.get("mode") or st_attrs.get("active_mode")
+        rate_val = st_attrs.get("rate")
+
+        input_sr = meta_attrs.get("samplerate")
+        input_bits = meta_attrs.get("bits")
+        input_fmt = f"{input_bits}bit" if input_bits else None
+        output_sr = s_attrs.get("active_rate") or st_attrs.get("active_rate")
+        output_fmt = s_attrs.get("active_mode")
+
         return HQPlayerState(
-            state=attrs.get("state", "unknown"),
-            volume=self._parse_float(attrs.get("volume")),
-            filter_1x=attrs.get("filter1x") or attrs.get("filter"),
-            filter_nx=attrs.get("filternx") or attrs.get("filter"),
-            shaper=attrs.get("shaper"),
-            output_mode=attrs.get("mode") or attrs.get("output_mode"),
-            sample_rate=attrs.get("rate") or attrs.get("sample_rate"),
-            matrix_profile=attrs.get("matrix") or attrs.get("matrix_profile"),
-            input_sample_rate=attrs.get("input_rate"),
-            output_sample_rate=attrs.get("output_rate"),
-            input_format=attrs.get("input_format"),
-            output_format=attrs.get("output_format"),
+            state=state_str,
+            volume=self._parse_float(
+                st_attrs.get("volume") or s_attrs.get("volume")
+            ),
+            volume_min=vol_min,
+            volume_max=vol_max,
+            volume_enabled=vol_enabled,
+            filter_1x=(
+                self._filter_val_to_name.get(filter_1x_val, filter_1x_val)
+                if filter_1x_val is not None
+                else s_attrs.get("active_filter")
+            ),
+            filter_nx=(
+                self._filter_val_to_name.get(filter_nx_val, filter_nx_val)
+                if filter_nx_val is not None
+                else s_attrs.get("active_filter")
+            ),
+            shaper=(
+                self._shaper_val_to_name.get(shaper_val, shaper_val)
+                if shaper_val is not None
+                else s_attrs.get("active_shaper")
+            ),
+            output_mode=(
+                self._mode_val_to_name.get(mode_val, mode_val)
+                if mode_val is not None
+                else s_attrs.get("active_mode")
+            ),
+            sample_rate=(
+                self._rate_val_to_name.get(rate_val, rate_val)
+                if rate_val is not None
+                else output_sr
+            ),
+            matrix_profile=matrix_current or st_attrs.get("matrix_profile"),
+            input_sample_rate=input_sr,
+            output_sample_rate=output_sr,
+            input_format=input_fmt,
+            output_format=output_fmt,
             filters_1x=filters_1x,
             filters_nx=filters_nx,
             shapers=shapers,
@@ -233,25 +333,30 @@ class HQPlayerClient:
         await self._send_command(f'<Volume value="{volume_db:.1f}"/>')
 
     async def set_filter_1x(self, name: str) -> None:
-        """Set 1x filter by name."""
-        await self._send_command(f'<SetFilter1x name="{name}"/>')
+        """Set filter by name (maps to HQPlayer value)."""
+        val = self._filter_name_to_val.get(name, name)
+        await self._send_command(f'<SetFilter value="{val}"/>')
 
     async def set_filter_nx(self, name: str) -> None:
-        """Set Nx filter by name."""
-        await self._send_command(f'<SetFilterNx name="{name}"/>')
+        """Set Nx filter by name (maps to HQPlayer value)."""
+        val = self._filter_name_to_val.get(name, name)
+        await self._send_command(f'<SetFilter value="{val}"/>')
 
     async def set_shaper(self, name: str) -> None:
-        """Set shaper / modulator by name."""
-        await self._send_command(f'<SetShaper name="{name}"/>')
+        """Set shaper / modulator by name (maps to HQPlayer value)."""
+        val = self._shaper_name_to_val.get(name, name)
+        await self._send_command(f'<SetShaper value="{val}"/>')
 
     async def set_output_mode(self, name: str) -> None:
-        """Set output mode (e.g. PCM, SDM) by name."""
-        await self._send_command(f'<SetOutputMode name="{name}"/>')
+        """Set output mode by name (maps to HQPlayer value)."""
+        val = self._mode_name_to_val.get(name, name)
+        await self._send_command(f'<SetMode value="{val}"/>')
 
-    async def set_sample_rate(self, rate: str) -> None:
-        """Set output sample rate."""
-        await self._send_command(f'<SetRate name="{rate}"/>')
+    async def set_sample_rate(self, name: str) -> None:
+        """Set output sample rate by name (maps to HQPlayer value)."""
+        val = self._rate_name_to_val.get(name, name)
+        await self._send_command(f'<SetRate value="{val}"/>')
 
     async def set_matrix_profile(self, name: str) -> None:
-        """Set matrix profile by name."""
-        await self._send_command(f'<SetMatrixProfile name="{name}"/>')
+        """Set matrix profile (<MatrixSetProfile value="..."/>)."""
+        await self._send_command(f'<MatrixSetProfile value="{name}"/>')

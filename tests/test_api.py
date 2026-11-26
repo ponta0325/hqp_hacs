@@ -39,8 +39,8 @@ class MockHQPlayerServer:
     def __init__(self) -> None:
         self.mode = "0"  # 0=PCM, 1=SDM (DSD)
         self.volume = -12.0
-        self.filter = "48"
-        self.shaper = "20"
+        self.filter = "1"
+        self.shaper = "10"
         self.rate = "768000"
         self.matrix = "LANDER"
         self.server: asyncio.Server | None = None

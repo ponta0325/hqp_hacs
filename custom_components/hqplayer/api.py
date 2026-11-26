@@ -317,28 +317,19 @@ class HQPlayerClient:
             volume_max=vol_max,
             volume_enabled=vol_enabled,
             filter_1x=(
-                s_attrs.get("active_filter")
-                or (
-                    self._filter_id_to_name.get(filter_1x_val, filter_1x_val)
-                    if filter_1x_val is not None
-                    else None
-                )
+                self._filter_id_to_name.get(filter_1x_val, filter_1x_val)
+                if filter_1x_val is not None
+                else s_attrs.get("active_filter")
             ),
             filter_nx=(
-                s_attrs.get("active_filter")
-                or (
-                    self._filter_id_to_name.get(filter_nx_val, filter_nx_val)
-                    if filter_nx_val is not None
-                    else None
-                )
+                self._filter_id_to_name.get(filter_nx_val, filter_nx_val)
+                if filter_nx_val is not None
+                else s_attrs.get("active_filter")
             ),
             shaper=(
-                s_attrs.get("active_shaper")
-                or (
-                    self._shaper_id_to_name.get(shaper_val, shaper_val)
-                    if shaper_val is not None
-                    else None
-                )
+                self._shaper_id_to_name.get(shaper_val, shaper_val)
+                if shaper_val is not None
+                else s_attrs.get("active_shaper")
             ),
             output_mode=(
                 s_attrs.get("active_mode")
@@ -371,14 +362,14 @@ class HQPlayerClient:
         await self._send_command(f'<Volume value="{volume_db:.1f}"/>')
 
     async def set_filter_1x(self, name: str) -> None:
-        """Set filter by name (maps to HQPlayer value)."""
+        """Set 1x filter by name (maps to HQPlayer index)."""
         val = self._filter_name_to_val.get(name, name)
-        await self._send_command(f'<SetFilter value="{val}"/>')
+        await self._send_command(f'<SetFilter1x value="{val}"/>')
 
     async def set_filter_nx(self, name: str) -> None:
-        """Set Nx filter by name (maps to HQPlayer value)."""
+        """Set Nx filter by name (maps to HQPlayer index)."""
         val = self._filter_name_to_val.get(name, name)
-        await self._send_command(f'<SetFilter value="{val}"/>')
+        await self._send_command(f'<SetFilterNx value="{val}"/>')
 
     async def set_shaper(self, name: str) -> None:
         """Set shaper / modulator by name (maps to HQPlayer value)."""

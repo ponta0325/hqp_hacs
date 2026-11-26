@@ -168,34 +168,6 @@ class HQPlayerClient:
                         return root
 
     @staticmethod
-    def _parse_item_map(
-        element: ET.Element, *item_tags: str, prefer_index: bool = False
-    ) -> tuple[list[str], dict[str, str], dict[str, str]]:
-        """Extract ordered names, name->value, and (value|index)->name mappings."""
-        names: list[str] = []
-        name_to_val: dict[str, str] = {}
-        id_to_name: dict[str, str] = {}
-        for tag in item_tags:
-            for child in element.findall(f".//{tag}"):
-                name = child.attrib.get("name")
-                val = child.attrib.get("value")
-                idx = child.attrib.get("index")
-                if prefer_index:
-                    target_val = idx if idx is not None else (val or name)
-                else:
-                    target_val = val if val is not None else (idx or name)
-                if name and target_val is not None:
-                    names.append(name)
-                    name_to_val[name] = target_val
-                    if val is not None:
-                        id_to_name[val] = name
-                    if idx is not None and idx not in id_to_name:
-                        id_to_name[idx] = name
-            if names:
-                break
-        return names, name_to_val, id_to_name
-
-    @staticmethod
     def _parse_float(value: str | None) -> float | None:
         """Safely parse a float attribute."""
         if value is None or value == "":
@@ -216,42 +188,69 @@ class HQPlayerClient:
     async def get_filters(self) -> tuple[list[str], list[str]]:
         """Fetch available filters (<FiltersItem>)."""
         resp = await self._send_command("<GetFilters/>")
-        names, n2v, v2n = self._parse_item_map(
-            resp, "FiltersItem", "FilterItem", "Filter", "Filter1x"
-        )
-        if not names:
-            _LOGGER.debug(
-                "GetFilters returned no items: %s",
-                ET.tostring(resp, encoding="unicode"),
-            )
-        self._filter_name_to_val = n2v
-        self._filter_id_to_name = v2n
+        names: list[str] = []
+        n2k: dict[str, str] = {}
+        k2n: dict[str, str] = {}
+        for child in resp.findall(".//FiltersItem"):
+            name = child.attrib.get("name")
+            idx = child.attrib.get("index")
+            if name and idx is not None:
+                names.append(name)
+                n2k[name] = idx
+                k2n[idx] = name
+        self._filter_name_to_val = n2k
+        self._filter_id_to_name = k2n
         return names, list(names)
 
     async def get_shapers(self) -> list[str]:
         """Fetch available shapers / modulators (<ShapersItem>)."""
         resp = await self._send_command("<GetShapers/>")
-        names, n2v, v2n = self._parse_item_map(resp, "ShapersItem")
-        self._shaper_name_to_val = n2v
-        self._shaper_id_to_name = v2n
+        names: list[str] = []
+        n2k: dict[str, str] = {}
+        k2n: dict[str, str] = {}
+        for child in resp.findall(".//ShapersItem"):
+            name = child.attrib.get("name")
+            idx = child.attrib.get("index")
+            if name and idx is not None:
+                names.append(name)
+                n2k[name] = idx
+                k2n[idx] = name
+        self._shaper_name_to_val = n2k
+        self._shaper_id_to_name = k2n
         return names
 
     async def get_output_modes(self) -> list[str]:
         """Fetch available output modes (<ModesItem>)."""
         resp = await self._send_command("<GetModes/>")
-        names, n2v, v2n = self._parse_item_map(
-            resp, "ModesItem", prefer_index=True
-        )
-        self._mode_name_to_val = n2v
-        self._mode_id_to_name = v2n
+        names: list[str] = []
+        n2k: dict[str, str] = {}
+        k2n: dict[str, str] = {}
+        for child in resp.findall(".//ModesItem"):
+            name = child.attrib.get("name")
+            idx = child.attrib.get("index")
+            if name and idx is not None:
+                names.append(name)
+                n2k[name] = idx
+                k2n[idx] = name
+        self._mode_name_to_val = n2k
+        self._mode_id_to_name = k2n
         return names
 
     async def get_sample_rates(self) -> list[str]:
         """Fetch available sample rates (<RatesItem>)."""
         resp = await self._send_command("<GetRates/>")
-        names, n2v, v2n = self._parse_item_map(resp, "RatesItem")
-        self._rate_name_to_val = n2v
-        self._rate_id_to_name = v2n
+        names: list[str] = []
+        n2k: dict[str, str] = {}
+        k2n: dict[str, str] = {}
+        for child in resp.findall(".//RatesItem"):
+            name = child.attrib.get("name")
+            val = child.attrib.get("value")
+            if name and val is not None:
+                names.append(name)
+                n2k[name] = val
+                k2n[val] = name
+        self._rate_name_to_val = n2k
+        self._rate_id_to_name = k2n
         return names
 
     async def get_matrix_profiles(self) -> list[str]:

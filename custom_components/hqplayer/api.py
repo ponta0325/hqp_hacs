@@ -306,14 +306,20 @@ class HQPlayerClient:
             volume_max=vol_max,
             volume_enabled=vol_enabled,
             filter_1x=(
-                self._filter_id_to_name.get(filter_1x_val, filter_1x_val)
-                if filter_1x_val is not None
-                else s_attrs.get("active_filter")
+                s_attrs.get("active_filter")
+                or (
+                    self._filter_id_to_name.get(filter_1x_val, filter_1x_val)
+                    if filter_1x_val is not None
+                    else None
+                )
             ),
             filter_nx=(
-                self._filter_id_to_name.get(filter_nx_val, filter_nx_val)
-                if filter_nx_val is not None
-                else s_attrs.get("active_filter")
+                s_attrs.get("active_filter")
+                or (
+                    self._filter_id_to_name.get(filter_nx_val, filter_nx_val)
+                    if filter_nx_val is not None
+                    else None
+                )
             ),
             shaper=(
                 s_attrs.get("active_shaper")

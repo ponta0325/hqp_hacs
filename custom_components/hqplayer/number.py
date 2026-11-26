@@ -43,6 +43,35 @@ class HQPlayerVolumeNumber(HQPlayerEntity, NumberEntity):
         super().__init__(coordinator, entry_id, "volume")
 
     @property
+    def available(self) -> bool:
+        """Return True if volume control is enabled on HQPlayer."""
+        return (
+            super().available
+            and self.coordinator.data is not None
+            and self.coordinator.data.volume_enabled
+        )
+
+    @property
+    def native_min_value(self) -> float:
+        """Return dynamic minimum volume in dB."""
+        if (
+            self.coordinator.data is not None
+            and self.coordinator.data.volume_min is not None
+        ):
+            return self.coordinator.data.volume_min
+        return MIN_VOLUME_DB
+
+    @property
+    def native_max_value(self) -> float:
+        """Return dynamic maximum volume in dB."""
+        if (
+            self.coordinator.data is not None
+            and self.coordinator.data.volume_max is not None
+        ):
+            return self.coordinator.data.volume_max
+        return MAX_VOLUME_DB
+
+    @property
     def native_value(self) -> float | None:
         """Return the current volume in dB."""
         if self.coordinator.data is None:

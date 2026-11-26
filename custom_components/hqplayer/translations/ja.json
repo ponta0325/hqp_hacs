@@ -1,0 +1,22 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "HQPlayer に接続",
+        "description": "HQPlayer のホスト（IP アドレス）と TCP Control API ポート（デフォルト 4321）を入力してください。",
+        "data": {
+          "host": "ホスト",
+          "port": "ポート",
+          "scan_interval": "更新間隔（秒）"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "HQPlayer Control API に接続できませんでした",
+      "unknown": "予期しないエラーが発生しました"
+    },
+    "abort": {
+      "already_configured": "このデバイスはすでに設定されています"
+    }
+  }
+}

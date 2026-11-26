@@ -73,6 +73,8 @@ class HQPlayerClient:
         # Name <-> value / index mappings populated from Get* commands
         self._filter_name_to_val: dict[str, str] = {}
         self._filter_id_to_name: dict[str, str] = {}
+        self._current_filter_1x_idx: str | None = None
+        self._current_filter_nx_idx: str | None = None
         self._shaper_name_to_val: dict[str, str] = {}
         self._shaper_id_to_name: dict[str, str] = {}
         self._mode_name_to_val: dict[str, str] = {}
@@ -298,6 +300,8 @@ class HQPlayerClient:
 
         filter_1x_val = st_attrs.get("filter1x") or st_attrs.get("filter")
         filter_nx_val = st_attrs.get("filterNx") or st_attrs.get("filter")
+        self._current_filter_1x_idx = filter_1x_val
+        self._current_filter_nx_idx = filter_nx_val
         shaper_val = st_attrs.get("shaper")
         mode_val = st_attrs.get("mode") or st_attrs.get("active_mode")
         rate_val = st_attrs.get("rate")
@@ -362,14 +366,22 @@ class HQPlayerClient:
         await self._send_command(f'<Volume value="{volume_db:.1f}"/>')
 
     async def set_filter_1x(self, name: str) -> None:
-        """Set 1x filter by name (maps to HQPlayer index)."""
-        val = self._filter_name_to_val.get(name, name)
-        await self._send_command(f'<SetFilter1x value="{val}"/>')
+        """Set 1x filter independently (<SetFilter value="{nx}" value1x="{1x}"/>)."""
+        idx_1x = self._filter_name_to_val.get(name, name)
+        idx_nx = self._current_filter_nx_idx or idx_1x
+        self._current_filter_1x_idx = idx_1x
+        await self._send_command(
+            f'<SetFilter value="{idx_nx}" value1x="{idx_1x}"/>'
+        )
 
     async def set_filter_nx(self, name: str) -> None:
-        """Set Nx filter by name (maps to HQPlayer index)."""
-        val = self._filter_name_to_val.get(name, name)
-        await self._send_command(f'<SetFilterNx value="{val}"/>')
+        """Set Nx filter independently (<SetFilter value="{nx}" value1x="{1x}"/>)."""
+        idx_nx = self._filter_name_to_val.get(name, name)
+        idx_1x = self._current_filter_1x_idx or idx_nx
+        self._current_filter_nx_idx = idx_nx
+        await self._send_command(
+            f'<SetFilter value="{idx_nx}" value1x="{idx_1x}"/>'
+        )
 
     async def set_shaper(self, name: str) -> None:
         """Set shaper / modulator by name (maps to HQPlayer value)."""

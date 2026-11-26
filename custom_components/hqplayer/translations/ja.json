@@ -18,5 +18,16 @@
     "abort": {
       "already_configured": "このデバイスはすでに設定されています"
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "HQPlayer オプション",
+        "description": "Filter 1x / Filter Nx の選択肢として表示するフィルターをチェックしてください（すべて未チェックの場合は全件表示）。",
+        "data": {
+          "allowed_filters": "表示するフィルター"
+        }
+      }
+    }
   }
 }

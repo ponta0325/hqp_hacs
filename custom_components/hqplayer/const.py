@@ -9,6 +9,7 @@ DEFAULT_SCAN_INTERVAL = 10  # seconds
 DEFAULT_TIMEOUT = 5.0  # seconds
 
 CONF_SCAN_INTERVAL = "scan_interval"
+CONF_ALLOWED_FILTERS = "allowed_filters"
 
 PLATFORMS: list[Platform] = [
     Platform.SELECT,

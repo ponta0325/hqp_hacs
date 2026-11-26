@@ -11,6 +11,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import HQPlayerConfigEntry
 from .api import HQPlayerClient, HQPlayerState
+from .const import CONF_ALLOWED_FILTERS
 from .coordinator import HQPlayerDataUpdateCoordinator
 from .entity import HQPlayerEntity
 
@@ -109,7 +110,16 @@ class HQPlayerSelect(HQPlayerEntity, SelectEntity):
         """Return dynamic list of available options."""
         if self.coordinator.data is None:
             return []
-        return self.entity_description.options_fn(self.coordinator.data)
+        opts = self.entity_description.options_fn(self.coordinator.data)
+        if self.entity_description.key in ("filter_1x", "filter_nx"):
+            allowed = self.coordinator.config_entry.options.get(
+                CONF_ALLOWED_FILTERS, []
+            )
+            if allowed:
+                current = self.entity_description.current_fn(self.coordinator.data)
+                filtered = [o for o in opts if o in allowed or o == current]
+                return filtered
+        return opts
 
     @property
     def current_option(self) -> str | None:

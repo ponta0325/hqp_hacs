@@ -7,11 +7,28 @@ from typing import Any
 
 import voluptuous as vol
 
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlow,
+)
 from homeassistant.const import CONF_HOST, CONF_PORT
+from homeassistant.core import callback
+from homeassistant.helpers.selector import (
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
+)
 
 from .api import HQPlayerClient, HQPlayerConnectionError
-from .const import CONF_SCAN_INTERVAL, DEFAULT_PORT, DEFAULT_SCAN_INTERVAL, DOMAIN
+from .const import (
+    CONF_ALLOWED_FILTERS,
+    CONF_SCAN_INTERVAL,
+    DEFAULT_PORT,
+    DEFAULT_SCAN_INTERVAL,
+    DOMAIN,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -32,6 +49,12 @@ class HQPlayerConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for HQPlayer."""
 
     VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
+        """Return the options flow."""
+        return HQPlayerOptionsFlow()
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -73,3 +96,42 @@ class HQPlayerConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=STEP_USER_DATA_SCHEMA,
             errors=errors,
         )
+
+
+class HQPlayerOptionsFlow(OptionsFlow):
+    """Handle HQPlayer options (checkbox filter list)."""
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Manage the options."""
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        coordinator = getattr(self.config_entry, "runtime_data", None)
+        all_filters: list[str] = (
+            list(coordinator.data.filters_1x)
+            if coordinator is not None and coordinator.data is not None
+            else []
+        )
+        current_allowed: list[str] = list(
+            self.config_entry.options.get(CONF_ALLOWED_FILTERS, [])
+        )
+        # Keep any previously saved items in options so HA selector stays valid
+        options = list(dict.fromkeys([*all_filters, *current_allowed]))
+
+        schema = vol.Schema(
+            {
+                vol.Optional(
+                    CONF_ALLOWED_FILTERS,
+                    default=current_allowed,
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=options,
+                        multiple=True,
+                        mode=SelectSelectorMode.LIST,
+                    )
+                )
+            }
+        )
+        return self.async_show_form(step_id="init", data_schema=schema)

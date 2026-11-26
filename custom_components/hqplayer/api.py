@@ -128,10 +128,17 @@ class HQPlayerClient:
             try:
                 self._writer.write(payload)
                 await asyncio.wait_for(self._writer.drain(), timeout=self.timeout)
-                return await asyncio.wait_for(
+                resp = await asyncio.wait_for(
                     self._read_xml_element(self._reader),
                     timeout=self.timeout,
                 )
+                if resp.attrib.get("result") not in (None, "OK"):
+                    _LOGGER.warning(
+                        "HQPlayer command %s returned: %s",
+                        xml_command,
+                        ET.tostring(resp, encoding="unicode"),
+                    )
+                return resp
             except (OSError, TimeoutError, EOFError, ET.ParseError) as err:
                 await self.disconnect()
                 raise HQPlayerConnectionError(

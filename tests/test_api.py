@@ -151,7 +151,8 @@ class MockHQPlayerServer:
         if tag == "VolumeRange":
             return '<VolumeRange adaptive="0" enabled="1" max="0.0" min="-60.0"/>'
         if tag == "SetMode":
-            self.mode = root.attrib["value"]
+            val = root.attrib["value"]
+            self.mode = "1" if val == "2" else ("0" if val == "1" else val)
             if self.mode == "1":
                 self.shaper = "20"
                 self.rate = "11289600"

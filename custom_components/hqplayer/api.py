@@ -169,7 +169,7 @@ class HQPlayerClient:
 
     @staticmethod
     def _parse_item_map(
-        element: ET.Element, *item_tags: str
+        element: ET.Element, *item_tags: str, prefer_index: bool = False
     ) -> tuple[list[str], dict[str, str], dict[str, str]]:
         """Extract ordered names, name->value, and (value|index)->name mappings."""
         names: list[str] = []
@@ -180,7 +180,10 @@ class HQPlayerClient:
                 name = child.attrib.get("name")
                 val = child.attrib.get("value")
                 idx = child.attrib.get("index")
-                target_val = val if val is not None else (idx or name)
+                if prefer_index:
+                    target_val = idx if idx is not None else (val or name)
+                else:
+                    target_val = val if val is not None else (idx or name)
                 if name and target_val is not None:
                     names.append(name)
                     name_to_val[name] = target_val
@@ -236,7 +239,9 @@ class HQPlayerClient:
     async def get_output_modes(self) -> list[str]:
         """Fetch available output modes (<ModesItem>)."""
         resp = await self._send_command("<GetModes/>")
-        names, n2v, v2n = self._parse_item_map(resp, "ModesItem")
+        names, n2v, v2n = self._parse_item_map(
+            resp, "ModesItem", prefer_index=True
+        )
         self._mode_name_to_val = n2v
         self._mode_id_to_name = v2n
         return names

@@ -70,15 +70,15 @@ class HQPlayerClient:
         self._writer: asyncio.StreamWriter | None = None
         self._lock = asyncio.Lock()
 
-        # Name <-> value mappings populated from Get* commands
+        # Name <-> value / index mappings populated from Get* commands
         self._filter_name_to_val: dict[str, str] = {}
-        self._filter_val_to_name: dict[str, str] = {}
+        self._filter_id_to_name: dict[str, str] = {}
         self._shaper_name_to_val: dict[str, str] = {}
-        self._shaper_val_to_name: dict[str, str] = {}
+        self._shaper_id_to_name: dict[str, str] = {}
         self._mode_name_to_val: dict[str, str] = {}
-        self._mode_val_to_name: dict[str, str] = {}
+        self._mode_id_to_name: dict[str, str] = {}
         self._rate_name_to_val: dict[str, str] = {}
-        self._rate_val_to_name: dict[str, str] = {}
+        self._rate_id_to_name: dict[str, str] = {}
 
     @property
     def connected(self) -> bool:
@@ -164,21 +164,26 @@ class HQPlayerClient:
     def _parse_item_map(
         element: ET.Element, *item_tags: str
     ) -> tuple[list[str], dict[str, str], dict[str, str]]:
-        """Extract ordered names and name<->value mappings from XML items."""
+        """Extract ordered names, name->value, and (value|index)->name mappings."""
         names: list[str] = []
         name_to_val: dict[str, str] = {}
-        val_to_name: dict[str, str] = {}
+        id_to_name: dict[str, str] = {}
         for tag in item_tags:
             for child in element.findall(f".//{tag}"):
                 name = child.attrib.get("name")
-                val = child.attrib.get("value") or child.attrib.get("index") or name
-                if name and val is not None:
+                val = child.attrib.get("value")
+                idx = child.attrib.get("index")
+                target_val = val if val is not None else (idx or name)
+                if name and target_val is not None:
                     names.append(name)
-                    name_to_val[name] = val
-                    val_to_name[val] = name
+                    name_to_val[name] = target_val
+                    if val is not None:
+                        id_to_name[val] = name
+                    if idx is not None and idx not in id_to_name:
+                        id_to_name[idx] = name
             if names:
                 break
-        return names, name_to_val, val_to_name
+        return names, name_to_val, id_to_name
 
     @staticmethod
     def _parse_float(value: str | None) -> float | None:
@@ -210,7 +215,7 @@ class HQPlayerClient:
                 ET.tostring(resp, encoding="unicode"),
             )
         self._filter_name_to_val = n2v
-        self._filter_val_to_name = v2n
+        self._filter_id_to_name = v2n
         return names, list(names)
 
     async def get_shapers(self) -> list[str]:
@@ -218,7 +223,7 @@ class HQPlayerClient:
         resp = await self._send_command("<GetShapers/>")
         names, n2v, v2n = self._parse_item_map(resp, "ShapersItem")
         self._shaper_name_to_val = n2v
-        self._shaper_val_to_name = v2n
+        self._shaper_id_to_name = v2n
         return names
 
     async def get_output_modes(self) -> list[str]:
@@ -226,7 +231,7 @@ class HQPlayerClient:
         resp = await self._send_command("<GetModes/>")
         names, n2v, v2n = self._parse_item_map(resp, "ModesItem")
         self._mode_name_to_val = n2v
-        self._mode_val_to_name = v2n
+        self._mode_id_to_name = v2n
         return names
 
     async def get_sample_rates(self) -> list[str]:
@@ -234,7 +239,7 @@ class HQPlayerClient:
         resp = await self._send_command("<GetRates/>")
         names, n2v, v2n = self._parse_item_map(resp, "RatesItem")
         self._rate_name_to_val = n2v
-        self._rate_val_to_name = v2n
+        self._rate_id_to_name = v2n
         return names
 
     async def get_matrix_profiles(self) -> list[str]:
@@ -301,27 +306,33 @@ class HQPlayerClient:
             volume_max=vol_max,
             volume_enabled=vol_enabled,
             filter_1x=(
-                self._filter_val_to_name.get(filter_1x_val, filter_1x_val)
+                self._filter_id_to_name.get(filter_1x_val, filter_1x_val)
                 if filter_1x_val is not None
                 else s_attrs.get("active_filter")
             ),
             filter_nx=(
-                self._filter_val_to_name.get(filter_nx_val, filter_nx_val)
+                self._filter_id_to_name.get(filter_nx_val, filter_nx_val)
                 if filter_nx_val is not None
                 else s_attrs.get("active_filter")
             ),
             shaper=(
-                self._shaper_val_to_name.get(shaper_val, shaper_val)
-                if shaper_val is not None
-                else s_attrs.get("active_shaper")
+                s_attrs.get("active_shaper")
+                or (
+                    self._shaper_id_to_name.get(shaper_val, shaper_val)
+                    if shaper_val is not None
+                    else None
+                )
             ),
             output_mode=(
-                self._mode_val_to_name.get(mode_val, mode_val)
-                if mode_val is not None
-                else s_attrs.get("active_mode")
+                s_attrs.get("active_mode")
+                or (
+                    self._mode_id_to_name.get(mode_val, mode_val)
+                    if mode_val is not None
+                    else None
+                )
             ),
             sample_rate=(
-                self._rate_val_to_name.get(rate_val, rate_val)
+                self._rate_id_to_name.get(rate_val, rate_val)
                 if rate_val is not None
                 else output_sr
             ),

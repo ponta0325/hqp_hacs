@@ -162,19 +162,22 @@ class HQPlayerClient:
 
     @staticmethod
     def _parse_item_map(
-        element: ET.Element, item_tag: str
+        element: ET.Element, *item_tags: str
     ) -> tuple[list[str], dict[str, str], dict[str, str]]:
         """Extract ordered names and name<->value mappings from XML items."""
         names: list[str] = []
         name_to_val: dict[str, str] = {}
         val_to_name: dict[str, str] = {}
-        for child in element.findall(item_tag):
-            name = child.attrib.get("name")
-            val = child.attrib.get("value") or child.attrib.get("index") or name
-            if name and val is not None:
-                names.append(name)
-                name_to_val[name] = val
-                val_to_name[val] = name
+        for tag in item_tags:
+            for child in element.findall(f".//{tag}"):
+                name = child.attrib.get("name")
+                val = child.attrib.get("value") or child.attrib.get("index") or name
+                if name and val is not None:
+                    names.append(name)
+                    name_to_val[name] = val
+                    val_to_name[val] = name
+            if names:
+                break
         return names, name_to_val, val_to_name
 
     @staticmethod
@@ -198,7 +201,14 @@ class HQPlayerClient:
     async def get_filters(self) -> tuple[list[str], list[str]]:
         """Fetch available filters (<FiltersItem>)."""
         resp = await self._send_command("<GetFilters/>")
-        names, n2v, v2n = self._parse_item_map(resp, "FiltersItem")
+        names, n2v, v2n = self._parse_item_map(
+            resp, "FiltersItem", "FilterItem", "Filter", "Filter1x"
+        )
+        if not names:
+            _LOGGER.debug(
+                "GetFilters returned no items: %s",
+                ET.tostring(resp, encoding="unicode"),
+            )
         self._filter_name_to_val = n2v
         self._filter_val_to_name = v2n
         return names, list(names)

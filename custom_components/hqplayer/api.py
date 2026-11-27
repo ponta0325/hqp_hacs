@@ -44,7 +44,9 @@ class HQPlayerState:
     input_sample_rate: str | None = None
     output_sample_rate: str | None = None
     input_format: str | None = None
+    input_bits: str | None = None
     output_format: str | None = None
+    output_bits: str | None = None
 
     filters_1x: list[str] = field(default_factory=list)
     filters_nx: list[str] = field(default_factory=list)
@@ -300,10 +302,16 @@ class HQPlayerClient:
         )
         vol = self._parse_float(s_attrs.get("volume"))
         input_sr = meta_attrs.get("samplerate") or current.input_sample_rate
-        input_bits = meta_attrs.get("bits")
-        input_fmt = f"{input_bits}bit" if input_bits else current.input_format
+        input_bits_raw = meta_attrs.get("bits")
+        input_bits = f"{input_bits_raw}bit" if input_bits_raw else current.input_bits
+        sdm = meta_attrs.get("sdm")
+        input_fmt = (
+            "DSD" if sdm == "1" else ("PCM" if sdm == "0" else current.input_format)
+        )
         output_sr = s_attrs.get("active_rate") or current.output_sample_rate
         output_fmt = s_attrs.get("active_mode") or current.output_format
+        active_bits = s_attrs.get("active_bits")
+        output_bits = f"{active_bits}bit" if active_bits else current.output_bits
 
         return replace(
             current,
@@ -311,8 +319,10 @@ class HQPlayerClient:
             volume=vol if vol is not None else current.volume,
             input_sample_rate=input_sr,
             input_format=input_fmt,
+            input_bits=input_bits,
             output_sample_rate=output_sr,
             output_format=output_fmt,
+            output_bits=output_bits,
         )
 
     async def subscribe_status(
@@ -476,10 +486,14 @@ class HQPlayerClient:
         rate_val = st_attrs.get("rate")
 
         input_sr = meta_attrs.get("samplerate")
-        input_bits = meta_attrs.get("bits")
-        input_fmt = f"{input_bits}bit" if input_bits else None
+        input_bits_raw = meta_attrs.get("bits")
+        input_bits = f"{input_bits_raw}bit" if input_bits_raw else None
+        sdm = meta_attrs.get("sdm")
+        input_fmt = "DSD" if sdm == "1" else ("PCM" if sdm == "0" else None)
         output_sr = s_attrs.get("active_rate") or st_attrs.get("active_rate")
         output_fmt = s_attrs.get("active_mode")
+        active_bits = s_attrs.get("active_bits")
+        output_bits = f"{active_bits}bit" if active_bits else None
 
         return HQPlayerState(
             state=state_str,
@@ -521,7 +535,9 @@ class HQPlayerClient:
             input_sample_rate=input_sr,
             output_sample_rate=output_sr,
             input_format=input_fmt,
+            input_bits=input_bits,
             output_format=output_fmt,
+            output_bits=output_bits,
             filters_1x=filters_1x,
             filters_nx=filters_nx,
             shapers=shapers,

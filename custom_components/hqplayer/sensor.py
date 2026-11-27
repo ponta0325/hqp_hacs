@@ -63,10 +63,22 @@ SENSOR_DESCRIPTIONS: tuple[HQPlayerSensorDescription, ...] = (
         value_fn=lambda s: s.input_format,
     ),
     HQPlayerSensorDescription(
+        key="input_bits",
+        name="Input Bit Depth",
+        icon="mdi:sine-wave",
+        value_fn=lambda s: s.input_bits,
+    ),
+    HQPlayerSensorDescription(
         key="output_format",
         name="Output Format",
         icon="mdi:file-music-outline",
         value_fn=lambda s: s.output_format,
+    ),
+    HQPlayerSensorDescription(
+        key="output_bits",
+        name="Output Bit Depth",
+        icon="mdi:sine-wave",
+        value_fn=lambda s: s.output_bits,
     ),
 )
 

@@ -9,31 +9,51 @@ class HQPlayerDashboardStrategy extends HTMLElement {
 
   static async generateView(info) {
     const { hass } = info || {};
-    const states = hass?.states || {};
-    const entityIds = Object.keys(states);
 
-    const findEntity = (domain, suffix) =>
-      entityIds.find(
-        (id) => id.startsWith(`${domain}.`) && id.endsWith(suffix)
+    let hqEntities = [];
+    if (hass?.callWS) {
+      try {
+        const registry = await hass.callWS({ type: "config/entity_registry/list" });
+        hqEntities = registry.filter(
+          (e) => e.platform === "hqplayer" && !e.disabled_by
+        );
+      } catch (_err) {
+        hqEntities = [];
+      }
+    }
+
+    const findEntity = (domain, keySuffix) => {
+      const regMatch = hqEntities.find(
+        (e) =>
+          e.entity_id.startsWith(`${domain}.`) &&
+          (e.unique_id?.endsWith(`_${keySuffix}`) ||
+            e.entity_id.endsWith(`_${keySuffix}`))
       );
+      if (regMatch) return regMatch.entity_id;
 
-    const playbackState = findEntity("sensor", "_playback_state");
-    const inFmt = findEntity("sensor", "_input_format");
-    const inRate = findEntity("sensor", "_input_sample_rate");
-    const inBit = findEntity("sensor", "_input_bit_depth");
-    const outFmt = findEntity("sensor", "_output_format");
-    const outRate = findEntity("sensor", "_output_sample_rate");
-    const outBit = findEntity("sensor", "_output_bit_depth");
-    const apod = findEntity("sensor", "_apodization_count");
-    const clips = findEntity("sensor", "_clips_count");
+      const stateIds = Object.keys(hass?.states || {});
+      return stateIds.find(
+        (id) => id.startsWith(`${domain}.`) && id.endsWith(`_${keySuffix}`)
+      );
+    };
 
-    const outputMode = findEntity("select", "_output_mode");
-    const filter1x = findEntity("select", "_filter_1x");
-    const filterNx = findEntity("select", "_filter_nx");
-    const shaper = findEntity("select", "_shaper_modulator");
-    const matrix = findEntity("select", "_matrix_profile");
-    const volume = findEntity("number", "_volume");
-    const refresh = findEntity("button", "_refresh");
+    const playbackState = findEntity("sensor", "playback_state");
+    const inFmt = findEntity("sensor", "input_format");
+    const inRate = findEntity("sensor", "input_sample_rate");
+    const inBit = findEntity("sensor", "input_bits");
+    const outFmt = findEntity("sensor", "output_format");
+    const outRate = findEntity("sensor", "output_sample_rate");
+    const outBit = findEntity("sensor", "output_bits");
+    const apod = findEntity("sensor", "apod");
+    const clips = findEntity("sensor", "clips");
+
+    const outputMode = findEntity("select", "output_mode");
+    const filter1x = findEntity("select", "filter_1x");
+    const filterNx = findEntity("select", "filter_nx");
+    const shaper = findEntity("select", "shaper");
+    const matrix = findEntity("select", "matrix_profile");
+    const volume = findEntity("number", "volume");
+    const refresh = findEntity("button", "refresh");
 
     const cards = [];
 
@@ -131,6 +151,13 @@ if (!customElements.get("ll-strategy-dashboard-hqplayer-dashboard")) {
   customElements.define(
     "ll-strategy-dashboard-hqplayer-dashboard",
     HQPlayerDashboardStrategy
+  );
+}
+
+if (!customElements.get("ll-strategy-hqplayer-dashboard")) {
+  customElements.define(
+    "ll-strategy-hqplayer-dashboard",
+    class extends HQPlayerDashboardStrategy {}
   );
 }
 

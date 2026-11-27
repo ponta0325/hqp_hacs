@@ -13,7 +13,8 @@ from .const import DEFAULT_PORT, DEFAULT_TIMEOUT
 _LOGGER = logging.getLogger(__name__)
 
 _STATE_MAP = {
-    "1": "stopped",
+    "0": "stopped",
+    "1": "paused",
     "2": "playing",
 }
 

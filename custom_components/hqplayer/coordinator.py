@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from datetime import timedelta
 import logging
 import xml.etree.ElementTree as ET
 
@@ -18,7 +17,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class HQPlayerDataUpdateCoordinator(DataUpdateCoordinator[HQPlayerState]):
-    """Coordinator that polls HQPlayer Control API for state and dynamic lists."""
+    """Coordinator driven by real-time <Status subscribe="1"/> pushes."""
 
     def __init__(
         self,
@@ -26,16 +25,18 @@ class HQPlayerDataUpdateCoordinator(DataUpdateCoordinator[HQPlayerState]):
         client: HQPlayerClient,
         scan_interval: int,
     ) -> None:
-        """Initialize the coordinator."""
+        """Initialize the coordinator (no periodic polling)."""
         super().__init__(
             hass,
             _LOGGER,
             name=DOMAIN,
-            update_interval=timedelta(seconds=scan_interval),
+            update_interval=None,
         )
         self.client = client
         self._busy_count = 0
         self._cmd_lock = asyncio.Lock()
+        self._verify_fn: Callable[[HQPlayerState], bool] | None = None
+        self._verify_event: asyncio.Event | None = None
         self._stop_event = asyncio.Event()
         self._sub_task: asyncio.Task[None] | None = None
 
@@ -66,11 +67,17 @@ class HQPlayerDataUpdateCoordinator(DataUpdateCoordinator[HQPlayerState]):
             self._sub_task = None
 
     async def _handle_status_push(self, status_el: ET.Element) -> None:
-        """Update coordinator data immediately on <Status> push."""
+        """Update coordinator data on <Status> push and release busy if verified."""
         if self.data is None:
             return
         updated = self.client.apply_status_element(status_el, self.data)
         self.async_set_updated_data(updated)
+        if (
+            self._verify_event is not None
+            and self._verify_fn is not None
+            and self._verify_fn(updated)
+        ):
+            self._verify_event.set()
 
     async def async_execute_command(
         self,
@@ -78,23 +85,25 @@ class HQPlayerDataUpdateCoordinator(DataUpdateCoordinator[HQPlayerState]):
         verify: Callable[[HQPlayerState], bool] | None = None,
         timeout: float = 5.0,
     ) -> None:
-        """Execute a command and stay busy until state reflects the change."""
+        """Execute a command and stay busy until real-time <Status> reflects it."""
         self._busy_count += 1
         self.async_update_listeners()
         try:
             async with self._cmd_lock:
-                await action
-                loop = asyncio.get_running_loop()
-                deadline = loop.time() + timeout
-                while True:
+                event = asyncio.Event() if verify is not None else None
+                self._verify_fn = verify
+                self._verify_event = event
+                try:
+                    await action
+                    if event is not None:
+                        try:
+                            await asyncio.wait_for(event.wait(), timeout=timeout)
+                        except TimeoutError:
+                            pass
                     await self.async_request_refresh()
-                    if verify is None or (
-                        self.data is not None and verify(self.data)
-                    ):
-                        break
-                    if loop.time() >= deadline:
-                        break
-                    await asyncio.sleep(0.2)
+                finally:
+                    self._verify_fn = None
+                    self._verify_event = None
         finally:
             self._busy_count -= 1
             self.async_update_listeners()

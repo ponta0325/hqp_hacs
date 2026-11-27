@@ -328,11 +328,15 @@ class HQPlayerClient:
         output_bits = f"{active_bits}bit" if active_bits else current.output_bits
         apod = self._parse_int(s_attrs.get("apod"))
         clips = self._parse_int(s_attrs.get("clips"))
+        output_mode = s_attrs.get("active_mode") or current.output_mode
+        shaper = s_attrs.get("active_shaper") or current.shaper
 
         return replace(
             current,
             state=state_str,
             volume=vol if vol is not None else current.volume,
+            output_mode=output_mode,
+            shaper=shaper,
             input_sample_rate=input_sr,
             input_format=input_fmt,
             input_bits=input_bits,

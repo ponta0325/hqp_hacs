@@ -44,7 +44,7 @@ class HQPlayerVolumeNumber(HQPlayerEntity, NumberEntity):
 
     @property
     def available(self) -> bool:
-        """Return True if volume control is enabled and not busy."""
+        """Return True if volume control is enabled and not waiting for <Status>."""
         return (
             super().available
             and not self.coordinator.busy

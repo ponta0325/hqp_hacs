@@ -99,7 +99,7 @@ class HQPlayerSelect(HQPlayerEntity, SelectEntity):
 
     @property
     def available(self) -> bool:
-        """Return False while a command and state refresh are in progress."""
+        """Return False while waiting for real-time <Status> to match."""
         return super().available and not self.coordinator.busy
 
     @property

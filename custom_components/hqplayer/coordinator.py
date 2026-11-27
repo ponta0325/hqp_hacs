@@ -89,7 +89,7 @@ class HQPlayerDataUpdateCoordinator(DataUpdateCoordinator[HQPlayerState]):
         verify: Callable[[HQPlayerState], bool] | None = None,
         timeout: float = 5.0,
     ) -> None:
-        """Execute a command and stay busy until real-time <Status> reflects it."""
+        """Execute a command and stay busy until real-time <Status> matches."""
         self._busy_count += 1
         self.async_update_listeners()
         try:
@@ -104,7 +104,6 @@ class HQPlayerDataUpdateCoordinator(DataUpdateCoordinator[HQPlayerState]):
                             await asyncio.wait_for(event.wait(), timeout=timeout)
                         except TimeoutError:
                             pass
-                    await self.async_request_refresh()
                 finally:
                     self._verify_fn = None
                     self._verify_event = None

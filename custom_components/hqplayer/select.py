@@ -59,14 +59,6 @@ SELECT_DESCRIPTIONS: tuple[HQPlayerSelectDescription, ...] = (
         select_fn=lambda c, v: c.set_output_mode(v),
     ),
     HQPlayerSelectDescription(
-        key="sample_rate",
-        name="Sample Rate",
-        icon="mdi:speedometer",
-        options_fn=lambda s: s.sample_rates,
-        current_fn=lambda s: s.sample_rate,
-        select_fn=lambda c, v: c.set_sample_rate(v),
-    ),
-    HQPlayerSelectDescription(
         key="matrix_profile",
         name="Matrix Profile",
         icon="mdi:matrix",

@@ -22,6 +22,21 @@ class HQPlayerSensorDescription(SensorEntityDescription):
     value_fn: Callable[[HQPlayerState], str | None]
 
 
+def _format_sample_rate(value: str | None) -> str | None:
+    """Format sample rate in Hz to kHz or MHz."""
+    if value is None or value == "":
+        return None
+    try:
+        hz = int(float(value))
+    except ValueError:
+        return value
+    if hz >= 1_000_000:
+        return f"{hz / 1_000_000:.6f}".rstrip("0").rstrip(".") + " MHz"
+    if hz >= 1_000:
+        return f"{hz / 1_000:.3f}".rstrip("0").rstrip(".") + " kHz"
+    return f"{hz} Hz"
+
+
 SENSOR_DESCRIPTIONS: tuple[HQPlayerSensorDescription, ...] = (
     HQPlayerSensorDescription(
         key="playback_state",
@@ -33,13 +48,13 @@ SENSOR_DESCRIPTIONS: tuple[HQPlayerSensorDescription, ...] = (
         key="input_sample_rate",
         name="Input Sample Rate",
         icon="mdi:audio-input-stereo-minijack",
-        value_fn=lambda s: s.input_sample_rate,
+        value_fn=lambda s: _format_sample_rate(s.input_sample_rate),
     ),
     HQPlayerSensorDescription(
         key="output_sample_rate",
         name="Output Sample Rate",
         icon="mdi:speaker",
-        value_fn=lambda s: s.output_sample_rate,
+        value_fn=lambda s: _format_sample_rate(s.output_sample_rate),
     ),
     HQPlayerSensorDescription(
         key="input_format",

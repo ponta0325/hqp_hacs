@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable
 from datetime import timedelta
 import logging
 import xml.etree.ElementTree as ET
@@ -33,6 +34,7 @@ class HQPlayerDataUpdateCoordinator(DataUpdateCoordinator[HQPlayerState]):
             update_interval=timedelta(seconds=scan_interval),
         )
         self.client = client
+        self.busy = False
         self._stop_event = asyncio.Event()
         self._sub_task: asyncio.Task[None] | None = None
 
@@ -63,6 +65,17 @@ class HQPlayerDataUpdateCoordinator(DataUpdateCoordinator[HQPlayerState]):
             return
         updated = self.client.apply_status_element(status_el, self.data)
         self.async_set_updated_data(updated)
+
+    async def async_execute_command(self, action: Awaitable[None]) -> None:
+        """Execute a control command, mark entities busy until state refreshes."""
+        self.busy = True
+        self.async_update_listeners()
+        try:
+            await action
+            await self.async_request_refresh()
+        finally:
+            self.busy = False
+            self.async_update_listeners()
 
     async def _async_update_data(self) -> HQPlayerState:
         """Fetch latest state from HQPlayer (full on first/mode-change, light otherwise)."""

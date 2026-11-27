@@ -35,6 +35,11 @@ class HQPlayerRefreshButton(HQPlayerEntity, ButtonEntity):
         """Initialize the refresh button."""
         super().__init__(coordinator, entry_id, "refresh")
 
+    @property
+    def available(self) -> bool:
+        """Return False while a command and state refresh are in progress."""
+        return super().available and not self.coordinator.busy
+
     async def async_press(self) -> None:
         """Trigger a manual coordinator refresh."""
         await self.coordinator.async_request_refresh()

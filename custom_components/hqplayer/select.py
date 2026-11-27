@@ -98,11 +98,6 @@ class HQPlayerSelect(HQPlayerEntity, SelectEntity):
         self.entity_description = description
 
     @property
-    def available(self) -> bool:
-        """Return False while waiting for real-time <Status> to match."""
-        return super().available and not self.coordinator.busy
-
-    @property
     def options(self) -> list[str]:
         """Return dynamic list of available options."""
         if self.coordinator.data is None:

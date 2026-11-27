@@ -89,27 +89,9 @@ class HQPlayerDataUpdateCoordinator(DataUpdateCoordinator[HQPlayerState]):
         verify: Callable[[HQPlayerState], bool] | None = None,
         timeout: float = 5.0,
     ) -> None:
-        """Execute a command and stay busy until real-time <Status> matches."""
-        self._busy_count += 1
-        self.async_update_listeners()
-        try:
-            async with self._cmd_lock:
-                event = asyncio.Event() if verify is not None else None
-                self._verify_fn = verify
-                self._verify_event = event
-                try:
-                    await action
-                    if event is not None:
-                        try:
-                            await asyncio.wait_for(event.wait(), timeout=timeout)
-                        except TimeoutError:
-                            pass
-                finally:
-                    self._verify_fn = None
-                    self._verify_event = None
-        finally:
-            self._busy_count -= 1
-            self.async_update_listeners()
+        """Execute a control command serialized by _cmd_lock."""
+        async with self._cmd_lock:
+            await action
 
     async def _async_update_data(self) -> HQPlayerState:
         """Fetch latest state from HQPlayer (full on first/mode-change, light otherwise)."""

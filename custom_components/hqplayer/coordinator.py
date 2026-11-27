@@ -34,9 +34,15 @@ class HQPlayerDataUpdateCoordinator(DataUpdateCoordinator[HQPlayerState]):
             update_interval=timedelta(seconds=scan_interval),
         )
         self.client = client
-        self.busy = False
+        self._busy_count = 0
+        self._cmd_lock = asyncio.Lock()
         self._stop_event = asyncio.Event()
         self._sub_task: asyncio.Task[None] | None = None
+
+    @property
+    def busy(self) -> bool:
+        """Return True while any command or refresh is in progress."""
+        return self._busy_count > 0
 
     def start_subscription(self) -> None:
         """Start background <Status subscribe="1"/> listener."""
@@ -68,13 +74,14 @@ class HQPlayerDataUpdateCoordinator(DataUpdateCoordinator[HQPlayerState]):
 
     async def async_execute_command(self, action: Awaitable[None]) -> None:
         """Execute a control command, mark entities busy until state refreshes."""
-        self.busy = True
+        self._busy_count += 1
         self.async_update_listeners()
         try:
-            await action
-            await self.async_request_refresh()
+            async with self._cmd_lock:
+                await action
+                await self.async_request_refresh()
         finally:
-            self.busy = False
+            self._busy_count -= 1
             self.async_update_listeners()
 
     async def _async_update_data(self) -> HQPlayerState:

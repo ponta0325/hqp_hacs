@@ -351,8 +351,10 @@ class HQPlayerClient:
         self,
         on_status: Callable[[ET.Element], Awaitable[None]],
         stop_event: asyncio.Event,
+        on_connect: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
         """Maintain a dedicated <Status subscribe="1"/> stream until stopped."""
+        first_connect = True
         while not stop_event.is_set():
             writer: asyncio.StreamWriter | None = None
             try:
@@ -364,6 +366,9 @@ class HQPlayerClient:
                     b'<?xml version="1.0" encoding="UTF-8"?><Status subscribe="1"/>\n'
                 )
                 await asyncio.wait_for(writer.drain(), timeout=self.timeout)
+                if not first_connect and on_connect is not None:
+                    await on_connect()
+                first_connect = False
                 while not stop_event.is_set():
                     elem = await self._read_xml_element(reader)
                     if elem.tag == "Status":

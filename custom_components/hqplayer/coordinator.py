@@ -51,7 +51,11 @@ class HQPlayerDataUpdateCoordinator(DataUpdateCoordinator[HQPlayerState]):
             return
         self._stop_event.clear()
         self._sub_task = self.hass.async_create_background_task(
-            self.client.subscribe_status(self._handle_status_push, self._stop_event),
+            self.client.subscribe_status(
+                self._handle_status_push,
+                self._stop_event,
+                on_connect=self.async_request_refresh,
+            ),
             name=f"{DOMAIN}_status_subscription",
         )
 

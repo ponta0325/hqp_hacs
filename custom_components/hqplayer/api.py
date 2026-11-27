@@ -273,13 +273,14 @@ class HQPlayerClient:
         return names
 
     async def get_matrix_profiles(self) -> list[str]:
-        """Fetch available matrix profiles (<MatrixListProfiles/>)."""
+        """Fetch available matrix profiles (<MatrixListProfiles/>) sorted A-Z."""
         resp = await self._send_command("<MatrixListProfiles/>")
-        return [
+        profiles = [
             child.attrib["name"]
             for child in resp.findall("MatrixProfile")
             if child.attrib.get("name")
         ]
+        return sorted(profiles, key=str.casefold)
 
     async def get_matrix_profile(self) -> str | None:
         """Fetch currently active matrix profile (<MatrixGetProfile/>)."""

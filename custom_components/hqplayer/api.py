@@ -364,17 +364,16 @@ class HQPlayerClient:
         state_el = await self.get_state()
         matrix_current = await self.get_matrix_profile()
         vol_min, vol_max, vol_enabled = await self.get_volume_range()
-        self._options_loaded = True
 
         return self._build_state(
             status_el=status_el,
             state_el=state_el,
-            filters_1x=filters_1x,
-            filters_nx=filters_nx,
-            shapers=shapers,
-            output_modes=output_modes,
-            sample_rates=sample_rates,
-            matrix_profiles=matrix_profiles,
+            filters_1x=current.filters_1x,
+            filters_nx=current.filters_nx,
+            shapers=current.shapers,
+            output_modes=current.output_modes,
+            sample_rates=current.sample_rates,
+            matrix_profiles=current.matrix_profiles,
             matrix_current=matrix_current,
             vol_min=vol_min,
             vol_max=vol_max,

@@ -2,13 +2,13 @@ class HQPlayerDashboardStrategy extends HTMLElement {
   static async generate(config, hass) {
     const view = await HQPlayerDashboardStrategy.generateView({ config, hass });
     return {
-      title: config.title || "HQPlayer",
+      title: config?.title || "HQPlayer",
       views: [view],
     };
   }
 
   static async generateView(info) {
-    const { hass } = info;
+    const { hass } = info || {};
     const states = hass?.states || {};
     const entityIds = Object.keys(states);
 
@@ -100,6 +100,13 @@ class HQPlayerDashboardStrategy extends HTMLElement {
       });
     }
 
+    if (cards.length === 0) {
+      cards.push({
+        type: "markdown",
+        content: "No HQPlayer entities found. Please configure the HQPlayer integration first.",
+      });
+    }
+
     return {
       title: "HQPlayer",
       path: "hqplayer",
@@ -114,7 +121,32 @@ class HQPlayerDashboardStrategy extends HTMLElement {
   }
 }
 
-customElements.define(
-  "ll-strategy-dashboard-hqplayer-dashboard",
-  HQPlayerDashboardStrategy
-);
+class HQPlayerViewStrategy extends HTMLElement {
+  static async generate(config, hass) {
+    return HQPlayerDashboardStrategy.generateView({ config, hass });
+  }
+}
+
+if (!customElements.get("ll-strategy-dashboard-hqplayer-dashboard")) {
+  customElements.define(
+    "ll-strategy-dashboard-hqplayer-dashboard",
+    HQPlayerDashboardStrategy
+  );
+}
+
+if (!customElements.get("ll-strategy-view-hqplayer-dashboard")) {
+  customElements.define(
+    "ll-strategy-view-hqplayer-dashboard",
+    HQPlayerViewStrategy
+  );
+}
+
+window.customStrategies = window.customStrategies || [];
+if (!window.customStrategies.some((s) => s.type === "hqplayer-dashboard")) {
+  window.customStrategies.push({
+    type: "hqplayer-dashboard",
+    strategyType: "dashboard",
+    name: "HQPlayer Dashboard",
+    description: "Auto-generated dashboard for HQPlayer Control API integration.",
+  });
+}

@@ -25,7 +25,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: HQPlayerConfigEntry) -> 
         await hass.http.async_register_static_paths(
             [StaticPathConfig("/hqplayer/hqplayer-dashboard.js", str(js_path), False)]
         )
-        add_extra_js_url(hass, "/hqplayer/hqplayer-dashboard.js")
+        add_extra_js_url(hass, "/hqplayer/hqplayer-dashboard.js?v=1")
         domain_data["frontend_registered"] = True
 
     host = entry.data[CONF_HOST]

@@ -80,6 +80,18 @@ SENSOR_DESCRIPTIONS: tuple[HQPlayerSensorDescription, ...] = (
         icon="mdi:sine-wave",
         value_fn=lambda s: s.output_bits,
     ),
+    HQPlayerSensorDescription(
+        key="apod",
+        name="Apodization Count",
+        icon="mdi:waveform",
+        value_fn=lambda s: s.apod,
+    ),
+    HQPlayerSensorDescription(
+        key="clips",
+        name="Clips Count",
+        icon="mdi:alert-circle-outline",
+        value_fn=lambda s: s.clips,
+    ),
 )
 
 

@@ -48,6 +48,8 @@ class HQPlayerState:
     input_bits: str | None = None
     output_format: str | None = None
     output_bits: str | None = None
+    apod: int | None = None
+    clips: int | None = None
 
     filters_1x: list[str] = field(default_factory=list)
     filters_nx: list[str] = field(default_factory=list)
@@ -173,6 +175,16 @@ class HQPlayerClient:
                     depth -= 1
                     if depth == 0 and root is not None:
                         return root
+
+    @staticmethod
+    def _parse_int(value: str | None) -> int | None:
+        """Safely parse an int attribute."""
+        if value is None or value == "":
+            return None
+        try:
+            return int(value)
+        except ValueError:
+            return None
 
     @staticmethod
     def _parse_float(value: str | None) -> float | None:
@@ -313,6 +325,8 @@ class HQPlayerClient:
         output_fmt = s_attrs.get("active_mode") or current.output_format
         active_bits = s_attrs.get("active_bits")
         output_bits = f"{active_bits}bit" if active_bits else current.output_bits
+        apod = self._parse_int(s_attrs.get("apod"))
+        clips = self._parse_int(s_attrs.get("clips"))
 
         return replace(
             current,
@@ -324,6 +338,8 @@ class HQPlayerClient:
             output_sample_rate=output_sr,
             output_format=output_fmt,
             output_bits=output_bits,
+            apod=apod if apod is not None else current.apod,
+            clips=clips if clips is not None else current.clips,
         )
 
     async def subscribe_status(
@@ -539,6 +555,8 @@ class HQPlayerClient:
             input_bits=input_bits,
             output_format=output_fmt,
             output_bits=output_bits,
+            apod=self._parse_int(s_attrs.get("apod")),
+            clips=self._parse_int(s_attrs.get("clips")),
             filters_1x=filters_1x,
             filters_nx=filters_nx,
             shapers=shapers,

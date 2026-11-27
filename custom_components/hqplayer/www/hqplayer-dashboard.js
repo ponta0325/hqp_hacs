@@ -115,6 +115,6 @@ class HQPlayerDashboardStrategy extends HTMLElement {
 }
 
 customElements.define(
-  "ll-strategy-hqplayer-dashboard",
+  "ll-strategy-dashboard-hqplayer-dashboard",
   HQPlayerDashboardStrategy
 );

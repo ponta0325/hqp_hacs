@@ -589,9 +589,9 @@ class HQPlayerClient:
         )
 
     async def set_shaper(self, name: str) -> None:
-        """Set shaper / modulator by name (maps to HQPlayer value)."""
+        """Set shaper / modulator by name (<SetShaping value="{index}"/>)."""
         val = self._shaper_name_to_val.get(name, name)
-        await self._send_command(f'<SetShaper value="{val}"/>')
+        await self._send_command(f'<SetShaping value="{val}"/>')
 
     async def set_output_mode(self, name: str) -> None:
         """Set output mode by name (maps to HQPlayer index)."""

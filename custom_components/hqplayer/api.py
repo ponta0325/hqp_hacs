@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, field
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field, replace
 import logging
 import xml.etree.ElementTree as ET
 
@@ -81,6 +82,7 @@ class HQPlayerClient:
         self._mode_id_to_name: dict[str, str] = {}
         self._rate_name_to_val: dict[str, str] = {}
         self._rate_id_to_name: dict[str, str] = {}
+        self._options_loaded = False
 
     @property
     def connected(self) -> bool:
@@ -278,6 +280,140 @@ class HQPlayerClient:
             resp.attrib.get("enabled", "1") == "1",
         )
 
+    def invalidate_options_cache(self) -> None:
+        """Mark cached option lists as stale so the next poll refreshes them."""
+        self._options_loaded = False
+
+    def apply_status_element(
+        self, status_el: ET.Element, current: HQPlayerState
+    ) -> HQPlayerState:
+        """Return an updated HQPlayerState from a pushed <Status> element."""
+        s_attrs = status_el.attrib
+        meta = status_el.find("metadata")
+        meta_attrs = meta.attrib if meta is not None else {}
+
+        raw_state = s_attrs.get("state")
+        state_str = (
+            _STATE_MAP.get(raw_state, raw_state)
+            if raw_state is not None
+            else current.state
+        )
+        vol = self._parse_float(s_attrs.get("volume"))
+        input_sr = meta_attrs.get("samplerate") or current.input_sample_rate
+        input_bits = meta_attrs.get("bits")
+        input_fmt = f"{input_bits}bit" if input_bits else current.input_format
+        output_sr = s_attrs.get("active_rate") or current.output_sample_rate
+        output_fmt = s_attrs.get("active_mode") or current.output_format
+
+        return replace(
+            current,
+            state=state_str,
+            volume=vol if vol is not None else current.volume,
+            input_sample_rate=input_sr,
+            input_format=input_fmt,
+            output_sample_rate=output_sr,
+            output_format=output_fmt,
+        )
+
+    async def subscribe_status(
+        self,
+        on_status: Callable[[ET.Element], Awaitable[None]],
+        stop_event: asyncio.Event,
+    ) -> None:
+        """Maintain a dedicated <Status subscribe="1"/> stream until stopped."""
+        while not stop_event.is_set():
+            writer: asyncio.StreamWriter | None = None
+            try:
+                reader, writer = await asyncio.wait_for(
+                    asyncio.open_connection(self.host, self.port),
+                    timeout=self.timeout,
+                )
+                writer.write(
+                    b'<?xml version="1.0" encoding="UTF-8"?><Status subscribe="1"/>\n'
+                )
+                await asyncio.wait_for(writer.drain(), timeout=self.timeout)
+                while not stop_event.is_set():
+                    elem = await self._read_xml_element(reader)
+                    if elem.tag == "Status":
+                        await on_status(elem)
+            except asyncio.CancelledError:
+                raise
+            except (OSError, TimeoutError, EOFError, ET.ParseError) as err:
+                _LOGGER.debug("Status subscription disconnected: %s", err)
+                self.invalidate_options_cache()
+            finally:
+                if writer is not None:
+                    try:
+                        writer.close()
+                        await writer.wait_closed()
+                    except OSError:
+                        pass
+
+            if not stop_event.is_set():
+                try:
+                    await asyncio.wait_for(stop_event.wait(), timeout=5.0)
+                except TimeoutError:
+                    pass
+
+    async def fetch_light_state(self, current: HQPlayerState | None) -> HQPlayerState:
+        """Fetch only lightweight state (<Status/>, <State/>, Matrix, VolumeRange)."""
+        if not self._options_loaded or current is None:
+            return await self.fetch_full_state()
+
+        status_el = await self.get_status()
+        state_el = await self.get_state()
+        matrix_current = await self.get_matrix_profile()
+        vol_min, vol_max, vol_enabled = await self.get_volume_range()
+        self._options_loaded = True
+
+        return self._build_state(
+            status_el=status_el,
+            state_el=state_el,
+            filters_1x=filters_1x,
+            filters_nx=filters_nx,
+            shapers=shapers,
+            output_modes=output_modes,
+            sample_rates=sample_rates,
+            matrix_profiles=matrix_profiles,
+            matrix_current=matrix_current,
+            vol_min=vol_min,
+            vol_max=vol_max,
+            vol_enabled=vol_enabled,
+        )
+
+    def _build_state(
+        self,
+        *,
+        status_el: ET.Element,
+        state_el: ET.Element,
+        filters_1x: list[str],
+        filters_nx: list[str],
+        shapers: list[str],
+        output_modes: list[str],
+        sample_rates: list[str],
+        matrix_profiles: list[str],
+        matrix_current: str | None,
+        vol_min: float | None,
+        vol_max: float | None,
+        vol_enabled: bool,
+    ) -> HQPlayerState:
+        """Assemble HQPlayerState from XML elements and option lists."""
+
+        return self._build_state(
+            status_el=status_el,
+            state_el=state_el,
+            filters_1x=current.filters_1x,
+            filters_nx=current.filters_nx,
+            shapers=current.shapers,
+            output_modes=current.output_modes,
+            sample_rates=current.sample_rates,
+            matrix_profiles=current.matrix_profiles,
+            matrix_current=matrix_current,
+            vol_min=vol_min,
+            vol_max=vol_max,
+            vol_enabled=vol_enabled,
+        )
+
     async def fetch_full_state(self) -> HQPlayerState:
         """Fetch current status, engine state, and all dynamic option lists."""
         status_el = await self.get_status()
@@ -289,6 +425,40 @@ class HQPlayerClient:
         matrix_profiles = await self.get_matrix_profiles()
         matrix_current = await self.get_matrix_profile()
         vol_min, vol_max, vol_enabled = await self.get_volume_range()
+        self._options_loaded = True
+
+        return self._build_state(
+            status_el=status_el,
+            state_el=state_el,
+            filters_1x=filters_1x,
+            filters_nx=filters_nx,
+            shapers=shapers,
+            output_modes=output_modes,
+            sample_rates=sample_rates,
+            matrix_profiles=matrix_profiles,
+            matrix_current=matrix_current,
+            vol_min=vol_min,
+            vol_max=vol_max,
+            vol_enabled=vol_enabled,
+        )
+
+    def _build_state(
+        self,
+        *,
+        status_el: ET.Element,
+        state_el: ET.Element,
+        filters_1x: list[str],
+        filters_nx: list[str],
+        shapers: list[str],
+        output_modes: list[str],
+        sample_rates: list[str],
+        matrix_profiles: list[str],
+        matrix_current: str | None,
+        vol_min: float | None,
+        vol_max: float | None,
+        vol_enabled: bool,
+    ) -> HQPlayerState:
+        """Assemble HQPlayerState from XML elements and option lists."""
 
         s_attrs = status_el.attrib
         st_attrs = state_el.attrib
@@ -389,9 +559,10 @@ class HQPlayerClient:
         await self._send_command(f'<SetShaper value="{val}"/>')
 
     async def set_output_mode(self, name: str) -> None:
-        """Set output mode by name (maps to HQPlayer value)."""
+        """Set output mode by name (maps to HQPlayer index)."""
         val = self._mode_name_to_val.get(name, name)
         await self._send_command(f'<SetMode value="{val}"/>')
+        self.invalidate_options_cache()
 
     async def set_sample_rate(self, name: str) -> None:
         """Set output sample rate by name (maps to HQPlayer value)."""

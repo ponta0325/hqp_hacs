@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+from homeassistant.components.frontend import add_extra_js_url
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant
@@ -15,6 +19,15 @@ type HQPlayerConfigEntry = ConfigEntry[HQPlayerDataUpdateCoordinator]
 
 async def async_setup_entry(hass: HomeAssistant, entry: HQPlayerConfigEntry) -> bool:
     """Set up HQPlayer from a config entry."""
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    if not domain_data.get("frontend_registered"):
+        js_path = Path(__file__).parent / "www" / "hqplayer-dashboard.js"
+        await hass.http.async_register_static_paths(
+            [StaticPathConfig("/hqplayer/hqplayer-dashboard.js", str(js_path), False)]
+        )
+        add_extra_js_url(hass, "/hqplayer/hqplayer-dashboard.js")
+        domain_data["frontend_registered"] = True
+
     host = entry.data[CONF_HOST]
     port = entry.data.get(CONF_PORT, DEFAULT_PORT)
     scan_interval = entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)

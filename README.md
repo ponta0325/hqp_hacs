@@ -17,3 +17,10 @@ Home Assistant custom integration for controlling **HQPlayer** via the **HQPlaye
 1. Add this repository as a custom repository in HACS (Category: **Integration**).
 2. Install **HQPlayer** and restart Home Assistant.
 3. Go to **Settings -> Devices & Services -> Add Integration -> HQPlayer** and enter your HQPlayer host and port (`4321`).
+
+## Dashboard (Auto-generated Strategy)
+Create a new Dashboard in Home Assistant, open **Raw configuration editor**, and paste:
+```yaml
+strategy:
+  type: custom:hqplayer-dashboard
+```

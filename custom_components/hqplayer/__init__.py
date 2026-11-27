@@ -23,30 +23,66 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 STATIC_URL_PATH = "/hqplayer_files"
 DASHBOARD_JS_FILE = "hqplayer-dashboard.js"
-DASHBOARD_JS_VERSION = "0.1.19"
+DASHBOARD_JS_VERSION = "0.1.20"
 
 type HQPlayerConfigEntry = ConfigEntry[HQPlayerDataUpdateCoordinator]
+
+
+async def _async_register_lovelace_resource(hass: HomeAssistant, js_url: str) -> None:
+    """Ensure the dashboard strategy JS is registered in Lovelace resources (Storage mode)."""
+    lovelace_data = hass.data.get("lovelace")
+    if lovelace_data is None:
+        return
+
+    resources = getattr(lovelace_data, "resources", None)
+    if resources is None and isinstance(lovelace_data, dict):
+        resources = lovelace_data.get("resources")
+    if resources is None or not hasattr(resources, "async_create_item"):
+        return
+
+    try:
+        if hasattr(resources, "loaded") and not resources.loaded:
+            await resources.async_load()
+
+        for item in list(resources.async_items()):
+            url = item.get("url", "")
+            if url == js_url:
+                return
+            if url.startswith(
+                (f"{STATIC_URL_PATH}/{DASHBOARD_JS_FILE}", f"/hqplayer/{DASHBOARD_JS_FILE}")
+            ):
+                if hasattr(resources, "async_update_item"):
+                    await resources.async_update_item(
+                        item["id"], {"res_type": "module", "url": js_url}
+                    )
+                    return
+
+        await resources.async_create_item({"res_type": "module", "url": js_url})
+        _LOGGER.debug("Registered HQPlayer Lovelace resource: %s", js_url)
+    except Exception as err:
+        _LOGGER.debug("Skipping Lovelace resource registration: %s", err)
 
 
 async def _async_register_frontend(hass: HomeAssistant) -> None:
     """Register static frontend files and dashboard strategy JS."""
     domain_data = hass.data.setdefault(DOMAIN, {})
-    if domain_data.get("frontend_registered"):
-        return
-
-    www_dir = Path(__file__).parent / "www"
-    js_file = www_dir / DASHBOARD_JS_FILE
-    if not await hass.async_add_executor_job(js_file.is_file):
-        _LOGGER.error("HQPlayer dashboard JS not found at %s", js_file)
-        return
-
-    await hass.http.async_register_static_paths(
-        [StaticPathConfig(STATIC_URL_PATH, str(www_dir), False)]
-    )
     js_url = f"{STATIC_URL_PATH}/{DASHBOARD_JS_FILE}?v={DASHBOARD_JS_VERSION}"
-    add_extra_js_url(hass, js_url)
-    domain_data["frontend_registered"] = True
-    _LOGGER.debug("Registered HQPlayer dashboard JS at %s", js_url)
+
+    if not domain_data.get("frontend_registered"):
+        www_dir = Path(__file__).parent / "www"
+        js_file = www_dir / DASHBOARD_JS_FILE
+        if not await hass.async_add_executor_job(js_file.is_file):
+            _LOGGER.error("HQPlayer dashboard JS not found at %s", js_file)
+            return
+
+        await hass.http.async_register_static_paths(
+            [StaticPathConfig(STATIC_URL_PATH, str(www_dir), False)]
+        )
+        add_extra_js_url(hass, js_url)
+        domain_data["frontend_registered"] = True
+        _LOGGER.debug("Registered HQPlayer dashboard JS at %s", js_url)
+
+    await _async_register_lovelace_resource(hass, js_url)
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:

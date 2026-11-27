@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Callable
 from datetime import timedelta
 import logging
 import xml.etree.ElementTree as ET
@@ -72,14 +72,29 @@ class HQPlayerDataUpdateCoordinator(DataUpdateCoordinator[HQPlayerState]):
         updated = self.client.apply_status_element(status_el, self.data)
         self.async_set_updated_data(updated)
 
-    async def async_execute_command(self, action: Awaitable[None]) -> None:
-        """Execute a control command, mark entities busy until state refreshes."""
+    async def async_execute_command(
+        self,
+        action: Awaitable[None],
+        verify: Callable[[HQPlayerState], bool] | None = None,
+        timeout: float = 5.0,
+    ) -> None:
+        """Execute a command and stay busy until state reflects the change."""
         self._busy_count += 1
         self.async_update_listeners()
         try:
             async with self._cmd_lock:
                 await action
-                await self.async_request_refresh()
+                loop = asyncio.get_running_loop()
+                deadline = loop.time() + timeout
+                while True:
+                    await self.async_request_refresh()
+                    if verify is None or (
+                        self.data is not None and verify(self.data)
+                    ):
+                        break
+                    if loop.time() >= deadline:
+                        break
+                    await asyncio.sleep(0.2)
         finally:
             self._busy_count -= 1
             self.async_update_listeners()

@@ -23,9 +23,20 @@
     "step": {
       "init": {
         "title": "HQPlayer オプション",
-        "description": "Filter 1x / Filter Nx の選択肢として表示するフィルターをチェックしてください（すべて未チェックの場合は全件表示）。",
-        "data": {
-          "allowed_filters": "表示するフィルター"
+        "description": "選択肢として表示するフィルターとモジュレーターをチェックしてください（すべて未チェックの場合は全件表示）。",
+        "sections": {
+          "filters_section": {
+            "name": "フィルター (1x / Nx)",
+            "data": {
+              "allowed_filters": "表示するフィルター"
+            }
+          },
+          "shapers_section": {
+            "name": "シェーパー / モジュレーター",
+            "data": {
+              "allowed_shapers": "表示するモジュレーター"
+            }
+          }
         }
       }
     }

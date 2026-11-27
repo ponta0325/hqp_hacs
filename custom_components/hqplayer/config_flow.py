@@ -15,6 +15,7 @@ from homeassistant.config_entries import (
 )
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import callback
+from homeassistant.data_entry_flow import section
 from homeassistant.helpers.selector import (
     SelectSelector,
     SelectSelectorConfig,
@@ -24,6 +25,7 @@ from homeassistant.helpers.selector import (
 from .api import HQPlayerClient, HQPlayerConnectionError
 from .const import (
     CONF_ALLOWED_FILTERS,
+    CONF_ALLOWED_SHAPERS,
     CONF_SCAN_INTERVAL,
     DEFAULT_PORT,
     DEFAULT_SCAN_INTERVAL,
@@ -99,39 +101,75 @@ class HQPlayerConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class HQPlayerOptionsFlow(OptionsFlow):
-    """Handle HQPlayer options (checkbox filter list)."""
+    """Handle HQPlayer options (collapsible checkbox lists for filters & shapers)."""
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Manage the options."""
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+            flat_data = {
+                CONF_ALLOWED_FILTERS: user_input.get("filters_section", {}).get(
+                    CONF_ALLOWED_FILTERS, []
+                ),
+                CONF_ALLOWED_SHAPERS: user_input.get("shapers_section", {}).get(
+                    CONF_ALLOWED_SHAPERS, []
+                ),
+            }
+            return self.async_create_entry(title="", data=flat_data)
 
         coordinator = getattr(self.config_entry, "runtime_data", None)
-        all_filters: list[str] = (
-            list(coordinator.data.filters_1x)
-            if coordinator is not None and coordinator.data is not None
-            else []
-        )
-        current_allowed: list[str] = list(
+        data = coordinator.data if coordinator is not None else None
+
+        all_filters: list[str] = list(data.filters_1x) if data is not None else []
+        all_shapers: list[str] = list(data.shapers) if data is not None else []
+
+        current_filters: list[str] = list(
             self.config_entry.options.get(CONF_ALLOWED_FILTERS, [])
         )
-        # Keep any previously saved items in options so HA selector stays valid
-        options = list(dict.fromkeys([*all_filters, *current_allowed]))
+        current_shapers: list[str] = list(
+            self.config_entry.options.get(CONF_ALLOWED_SHAPERS, [])
+        )
+
+        filter_options = list(dict.fromkeys([*all_filters, *current_filters]))
+        shaper_options = list(dict.fromkeys([*all_shapers, *current_shapers]))
 
         schema = vol.Schema(
             {
-                vol.Optional(
-                    CONF_ALLOWED_FILTERS,
-                    default=current_allowed,
-                ): SelectSelector(
-                    SelectSelectorConfig(
-                        options=options,
-                        multiple=True,
-                        mode=SelectSelectorMode.LIST,
-                    )
-                )
+                vol.Required("filters_section"): section(
+                    vol.Schema(
+                        {
+                            vol.Optional(
+                                CONF_ALLOWED_FILTERS,
+                                default=current_filters,
+                            ): SelectSelector(
+                                SelectSelectorConfig(
+                                    options=filter_options,
+                                    multiple=True,
+                                    mode=SelectSelectorMode.LIST,
+                                )
+                            )
+                        }
+                    ),
+                    {"collapsed": True},
+                ),
+                vol.Required("shapers_section"): section(
+                    vol.Schema(
+                        {
+                            vol.Optional(
+                                CONF_ALLOWED_SHAPERS,
+                                default=current_shapers,
+                            ): SelectSelector(
+                                SelectSelectorConfig(
+                                    options=shaper_options,
+                                    multiple=True,
+                                    mode=SelectSelectorMode.LIST,
+                                )
+                            )
+                        }
+                    ),
+                    {"collapsed": True},
+                ),
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)

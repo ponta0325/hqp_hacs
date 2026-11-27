@@ -23,9 +23,20 @@
     "step": {
       "init": {
         "title": "HQPlayer Options",
-        "description": "Select the filters to display in Filter 1x / Filter Nx. Leave all unchecked to display all filters.",
-        "data": {
-          "allowed_filters": "Displayed filters"
+        "description": "Select the filters and modulators to display. Leave all unchecked to display all items.",
+        "sections": {
+          "filters_section": {
+            "name": "Filters (1x / Nx)",
+            "data": {
+              "allowed_filters": "Displayed filters"
+            }
+          },
+          "shapers_section": {
+            "name": "Shapers / Modulators",
+            "data": {
+              "allowed_shapers": "Displayed modulators"
+            }
+          }
         }
       }
     }

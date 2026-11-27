@@ -11,7 +11,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import HQPlayerConfigEntry
 from .api import HQPlayerClient, HQPlayerState
-from .const import CONF_ALLOWED_FILTERS
+from .const import CONF_ALLOWED_FILTERS, CONF_ALLOWED_SHAPERS
 from .coordinator import HQPlayerDataUpdateCoordinator
 from .entity import HQPlayerEntity
 
@@ -117,8 +117,14 @@ class HQPlayerSelect(HQPlayerEntity, SelectEntity):
             )
             if allowed:
                 current = self.entity_description.current_fn(self.coordinator.data)
-                filtered = [o for o in opts if o in allowed or o == current]
-                return filtered
+                return [o for o in opts if o in allowed or o == current]
+        elif self.entity_description.key == "shaper":
+            allowed = self.coordinator.config_entry.options.get(
+                CONF_ALLOWED_SHAPERS, []
+            )
+            if allowed:
+                current = self.entity_description.current_fn(self.coordinator.data)
+                return [o for o in opts if o in allowed or o == current]
         return opts
 
     @property

@@ -10,6 +10,7 @@ DEFAULT_TIMEOUT = 5.0  # seconds
 
 CONF_SCAN_INTERVAL = "scan_interval"
 CONF_ALLOWED_FILTERS = "allowed_filters"
+CONF_ALLOWED_SHAPERS = "allowed_shapers"
 
 PLATFORMS: list[Platform] = [
     Platform.SELECT,

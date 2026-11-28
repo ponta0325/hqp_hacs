@@ -45,7 +45,7 @@ class HQPlayerDataUpdateCoordinator(DataUpdateCoordinator[HQPlayerState]):
         self,
         action: Awaitable[None],
         verify: Callable[[HQPlayerState], bool] | None = None,
-        timeout: float = 5.0,
+        timeout: float = 10.0,
     ) -> None:
         """Execute a command and poll every 500ms until status matches (or timeout)."""
         self._busy_count += 1

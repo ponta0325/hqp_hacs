@@ -23,7 +23,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: HQPlayerConfigEntry) -> 
     coordinator = HQPlayerDataUpdateCoordinator(hass, client, scan_interval)
 
     await coordinator.async_config_entry_first_refresh()
-    coordinator.start_subscription()
 
     entry.runtime_data = coordinator
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
@@ -42,6 +41,5 @@ async def async_unload_entry(hass: HomeAssistant, entry: HQPlayerConfigEntry) ->
     """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
-        await entry.runtime_data.stop_subscription()
         await entry.runtime_data.client.disconnect()
     return unload_ok

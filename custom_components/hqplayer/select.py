@@ -98,6 +98,11 @@ class HQPlayerSelect(HQPlayerEntity, SelectEntity):
         self.entity_description = description
 
     @property
+    def available(self) -> bool:
+        """Return False while a command and status refresh are in progress."""
+        return super().available and not self.coordinator.busy
+
+    @property
     def options(self) -> list[str]:
         """Return dynamic list of available options."""
         if self.coordinator.data is None:
@@ -132,6 +137,5 @@ class HQPlayerSelect(HQPlayerEntity, SelectEntity):
     async def async_select_option(self, option: str) -> None:
         """Change the selected option."""
         await self.coordinator.async_execute_command(
-            self.entity_description.select_fn(self.coordinator.client, option),
-            verify=lambda s: self.entity_description.current_fn(s) == option,
+            self.entity_description.select_fn(self.coordinator.client, option)
         )

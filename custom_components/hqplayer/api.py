@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 import logging
 import xml.etree.ElementTree as ET
 
@@ -299,98 +298,6 @@ class HQPlayerClient:
     def invalidate_options_cache(self) -> None:
         """Mark cached option lists as stale so the next poll refreshes them."""
         self._options_loaded = False
-
-    def apply_status_element(
-        self, status_el: ET.Element, current: HQPlayerState
-    ) -> HQPlayerState:
-        """Return an updated HQPlayerState from a pushed <Status> element."""
-        s_attrs = status_el.attrib
-        meta = status_el.find("metadata")
-        meta_attrs = meta.attrib if meta is not None else {}
-
-        raw_state = s_attrs.get("state")
-        state_str = (
-            _STATE_MAP.get(raw_state, raw_state)
-            if raw_state is not None
-            else current.state
-        )
-        vol = self._parse_float(s_attrs.get("volume"))
-        input_sr = meta_attrs.get("samplerate") or current.input_sample_rate
-        input_bits_raw = meta_attrs.get("bits")
-        input_bits = f"{input_bits_raw}bit" if input_bits_raw else current.input_bits
-        sdm = meta_attrs.get("sdm")
-        input_fmt = (
-            "DSD" if sdm == "1" else ("PCM" if sdm == "0" else current.input_format)
-        )
-        output_sr = s_attrs.get("active_rate") or current.output_sample_rate
-        output_fmt = s_attrs.get("active_mode") or current.output_format
-        active_bits = s_attrs.get("active_bits")
-        output_bits = f"{active_bits}bit" if active_bits else current.output_bits
-        apod = self._parse_int(s_attrs.get("apod"))
-        clips = self._parse_int(s_attrs.get("clips"))
-        output_mode = s_attrs.get("active_mode") or current.output_mode
-        shaper = s_attrs.get("active_shaper") or current.shaper
-
-        return replace(
-            current,
-            state=state_str,
-            volume=vol if vol is not None else current.volume,
-            output_mode=output_mode,
-            shaper=shaper,
-            input_sample_rate=input_sr,
-            input_format=input_fmt,
-            input_bits=input_bits,
-            output_sample_rate=output_sr,
-            output_format=output_fmt,
-            output_bits=output_bits,
-            apod=apod if apod is not None else current.apod,
-            clips=clips if clips is not None else current.clips,
-        )
-
-    async def subscribe_status(
-        self,
-        on_status: Callable[[ET.Element], Awaitable[None]],
-        stop_event: asyncio.Event,
-        on_connect: Callable[[], Awaitable[None]] | None = None,
-    ) -> None:
-        """Maintain a dedicated <Status subscribe="1"/> stream until stopped."""
-        first_connect = True
-        while not stop_event.is_set():
-            writer: asyncio.StreamWriter | None = None
-            try:
-                reader, writer = await asyncio.wait_for(
-                    asyncio.open_connection(self.host, self.port),
-                    timeout=self.timeout,
-                )
-                writer.write(
-                    b'<?xml version="1.0" encoding="UTF-8"?><Status subscribe="1"/>\n'
-                )
-                await asyncio.wait_for(writer.drain(), timeout=self.timeout)
-                if not first_connect and on_connect is not None:
-                    await on_connect()
-                first_connect = False
-                while not stop_event.is_set():
-                    elem = await self._read_xml_element(reader)
-                    if elem.tag == "Status":
-                        await on_status(elem)
-            except asyncio.CancelledError:
-                raise
-            except (OSError, TimeoutError, EOFError, ET.ParseError) as err:
-                _LOGGER.debug("Status subscription disconnected: %s", err)
-                self.invalidate_options_cache()
-            finally:
-                if writer is not None:
-                    try:
-                        writer.close()
-                        await writer.wait_closed()
-                    except OSError:
-                        pass
-
-            if not stop_event.is_set():
-                try:
-                    await asyncio.wait_for(stop_event.wait(), timeout=5.0)
-                except TimeoutError:
-                    pass
 
     async def fetch_light_state(self, current: HQPlayerState | None) -> HQPlayerState:
         """Fetch only lightweight state (<Status/>, <State/>, Matrix, VolumeRange)."""

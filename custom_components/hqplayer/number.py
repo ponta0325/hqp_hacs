@@ -44,9 +44,10 @@ class HQPlayerVolumeNumber(HQPlayerEntity, NumberEntity):
 
     @property
     def available(self) -> bool:
-        """Return True if volume control is enabled on HQPlayer."""
+        """Return True if volume control is enabled and not busy."""
         return (
             super().available
+            and not self.coordinator.busy
             and self.coordinator.data is not None
             and self.coordinator.data.volume_enabled
         )
@@ -81,6 +82,5 @@ class HQPlayerVolumeNumber(HQPlayerEntity, NumberEntity):
     async def async_set_native_value(self, value: float) -> None:
         """Set the volume in dB."""
         await self.coordinator.async_execute_command(
-            self.coordinator.client.set_volume(value),
-            verify=lambda s: s.volume is not None and abs(s.volume - value) < 0.2,
+            self.coordinator.client.set_volume(value)
         )

@@ -137,5 +137,6 @@ class HQPlayerSelect(HQPlayerEntity, SelectEntity):
     async def async_select_option(self, option: str) -> None:
         """Change the selected option."""
         await self.coordinator.async_execute_command(
-            self.entity_description.select_fn(self.coordinator.client, option)
+            self.entity_description.select_fn(self.coordinator.client, option),
+            verify=lambda s: self.entity_description.current_fn(s) == option,
         )

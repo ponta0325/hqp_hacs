@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Callable
 from datetime import timedelta
 import logging
 
@@ -41,15 +41,29 @@ class HQPlayerDataUpdateCoordinator(DataUpdateCoordinator[HQPlayerState]):
         """Return True while a command and post-command refresh are in progress."""
         return self._busy_count > 0
 
-    async def async_execute_command(self, action: Awaitable[None]) -> None:
-        """Execute a command, wait 500ms, refresh status, then re-enable controls."""
+    async def async_execute_command(
+        self,
+        action: Awaitable[None],
+        verify: Callable[[HQPlayerState], bool] | None = None,
+        timeout: float = 5.0,
+    ) -> None:
+        """Execute a command and poll every 500ms until status matches (or timeout)."""
         self._busy_count += 1
         self.async_update_listeners()
         try:
             async with self._cmd_lock:
                 await action
-                await asyncio.sleep(0.5)
-                await self.async_request_refresh()
+                loop = asyncio.get_running_loop()
+                deadline = loop.time() + timeout
+                while True:
+                    await asyncio.sleep(0.5)
+                    await self.async_request_refresh()
+                    if verify is None or (
+                        self.data is not None and verify(self.data)
+                    ):
+                        break
+                    if loop.time() >= deadline:
+                        break
         finally:
             self._busy_count -= 1
             self.async_update_listeners()
